@@ -138,7 +138,7 @@ was killed, taking SSH with it.
 Our own `bench/run-bench.sh` already stopped the server first. We had written the
 correct procedure and then not followed it in an ad-hoc command.
 
-It is now documented in `MEASUREMENTS.md` and enforced in the bench script,
+It is now documented in [`MEASUREMENTS.md`](MEASUREMENTS.md) and enforced in the bench script,
 because "remember to stop the server" is not a control.
 
 ---

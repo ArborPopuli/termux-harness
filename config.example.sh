@@ -1,30 +1,41 @@
-# config.example.sh — 复制为 ~/.agent/config.sh 后按需修改
+# config.example.sh — copy to ~/.agent/config.sh and edit as needed
 #
-# agent.sh 与 start-llama-server.sh 都会读取这里导出的变量。
-# 这个文件被 .gitignore 忽略（config.sh），避免把本地路径/端口提交上去。
+# Both agent.sh and start-llama-server.sh read this file.
+# `config.sh` is gitignored so your local paths and ports stay out of the repo.
 
-# ---- 模型服务（agent.sh 用）------------------------------------------------
+# ---- model server (used by agent.sh) ---------------------------------------
 API_HOST="127.0.0.1"
 API_PORT="8080"
 MODEL="qwen2.5-coder-7b"
 
-# 生成参数：终端命令生成任务建议低温度。
-# 注意：CPU 侧实测约 10 t/s（tg），max_tokens 越大等待越久。
+# Generation parameters. Low temperature suits terminal-command generation.
+# Note: measured at roughly 10 t/s (tg) on the CPU path, so a large max_tokens
+# means a long wait.
 MAX_TOKENS="256"
 TEMPERATURE="0.2"
 
-# 注入到提示词里的历史轮数（行数）
+# Language the agent is told to write its explanation half in.
+# The command half is always English shell. Set to "en" for English replies.
+REPLY_LANG="zh"
+
+# History injected into the prompt, counted in LINES (2 lines per exchange).
 HISTORY_TURNS="6"
 
-# ---- llama-server 启动器（start-llama-server.sh 用）------------------------
-# GPU 卸载档位阶梯：先试全量，失败自动降级。
-#   -ngl 99 → 28 层全上 Adreno（需约 4.2 GiB 显存）
-#   -ngl 30 → 内存吃紧时的安全档
-#   -ngl 0  → 兜底纯 CPU
+# How much of each command's OUTPUT is kept in the history. The model needs it:
+# without it, "move it to ~/" cannot be resolved, because the reply that named
+# the path was never shown. Truncated so the history still fits the context.
+HISTORY_OUTPUT_CHARS="600"
+
+# ---- llama-server launcher (used by start-llama-server.sh) -----------------
+# GPU offload ladder: try full offload first, degrade automatically on failure.
+#   -ngl 99 → all 29 blocks on the Adreno (needs ~4.2 GiB of shared memory)
+#   -ngl 30 → safe step when memory is tight
+#   -ngl 0  → CPU only, the fallback
 NGL_LADDER="99 30 0"
 
-# 上下文长度。7B 下 4096 约需 448 MiB KV cache。
+# Context length. At 7B, 4096 needs about 448 MiB of KV cache.
 CTX="4096"
 
-# 就绪等待上限（秒）。首次把 4.3 GiB 权重搬进显存较慢。
+# Readiness timeout in seconds. The first load moves 4.3 GiB of weights into
+# device memory, which is slow.
 HEALTH_TIMEOUT="240"

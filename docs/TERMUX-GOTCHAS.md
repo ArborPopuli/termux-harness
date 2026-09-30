@@ -79,7 +79,7 @@ fine, the Termux process is gone**. `Connection refused` is a TCP RST, meaning n
 listener, not a busy machine.
 
 It will look like an OOM kill. It is not. We chased the OOM theory for a while
-(see `CORRECTIONS.md` §3).
+(see [`CORRECTIONS.md`](CORRECTIONS.md) §3).
 
 **Fix.**
 
@@ -159,7 +159,7 @@ grep -c freedreno /proc/<pid>/maps            # is the real driver mapped?
 grep -c lvp       /proc/<pid>/maps            # is the software rasteriser mapped?
 ```
 
-See `docs/MEASUREMENTS.md` §4 for why this is *better* evidence than a percentage.
+See [`MEASUREMENTS.md`](MEASUREMENTS.md) §4 for why this is *better* evidence than a percentage.
 
 ---
 

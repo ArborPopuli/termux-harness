@@ -62,7 +62,7 @@ in both runs: **GPU token generation is not faster than CPU** (9.31 < 9.86 and
 
 > ⚠️ If you take one thing from this page: **do not quote a single `llama-cli`
 > run from this device.** We did exactly that and got a figure that was wrong by
-> an order of magnitude. See `CORRECTIONS.md`.
+> an order of magnitude. See [`CORRECTIONS.md`](CORRECTIONS.md).
 
 ## 2. CPU time — the metric that actually matters on a phone
 
@@ -176,8 +176,22 @@ itself — which is exactly why (a) matters.
 git clone <this repo> ~/termux-harness
 cd ~/termux-harness
 bash install.sh
-bash bench/run-bench.sh      # writes bench/raw/*.txt ; restores llama-server after
+bash bench/run-bench.sh run3   # writes bench/raw/*-run3.txt ; restarts llama-server after
 ```
+
+Artifacts are named `<name>-<label>.<ext>`, so a fresh run never overwrites a
+published one. The numbers on this page come from the runs tagged `run1` and
+`run2`; pick a new label (e.g. `run3`) to produce a comparable run alongside
+them, or `bash bench/run-bench.sh run1 --force` to overwrite the published run 1
+artifacts in place.
+
+The **un-suffixed** files — `device-info.txt`, `gpu-evidence.txt`,
+`cpu-seconds.txt`, `proc-evidence.log` — are those published runs' artifacts with
+hand-written annotation on top: the `interpretation` block at the bottom of
+`cpu-seconds.txt`, the note at the bottom of `gpu-evidence.txt`, and the
+redaction in `device-info.txt`. They deliberately carry no run suffix, because
+they are not reproducible output: a fresh run writes suffixed files and never
+touches them.
 
 `run-bench.sh` **stops llama-server first**. This is not optional: the server holds
 ~4.2 GiB of device memory, and leaving it running while starting a second
