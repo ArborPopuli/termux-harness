@@ -21,6 +21,11 @@ REPLY_LANG="zh"
 # History injected into the prompt, counted in LINES (2 lines per exchange).
 HISTORY_TURNS="6"
 
+# How much of each command's OUTPUT is kept in the history. The model needs it:
+# without it, "move it to ~/" cannot be resolved, because the reply that named
+# the path was never shown. Truncated so the history still fits the context.
+HISTORY_OUTPUT_CHARS="600"
+
 # ---- llama-server launcher (used by start-llama-server.sh) -----------------
 # GPU offload ladder: try full offload first, degrade automatically on failure.
 #   -ngl 99 → all 29 blocks on the Adreno (needs ~4.2 GiB of shared memory)

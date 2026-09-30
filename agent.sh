@@ -209,7 +209,13 @@ main() {
             echo -e "${GREEN}output:${NC}"
             echo "$output"
         fi
-        save_context "$user_prompt" "explanation: $explanation | ran: $cmd"
+        # Record what the command *produced*, not just what was run. Without the
+        # output, a follow-up like "move it to ~/" is unanswerable: the model
+        # knows the command it issued but not the path that came back, so it
+        # guesses. Truncated, because this goes back into a 4096-token context.
+        local brief
+        brief=$(printf '%s' "$output" | head -c "${HISTORY_OUTPUT_CHARS:-600}" | tr '\n' ' ')
+        save_context "$user_prompt" "ran: $cmd | output: ${brief:-<no output>}"
     else
         echo -e "${CYAN}cancelled.${NC}"
     fi
