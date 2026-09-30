@@ -1,29 +1,35 @@
-# ---- 运行期产物 ------------------------------------------------------------
+# ---- runtime artifacts -------------------------------------------------------
 *.log
 *.pid
 history.txt
 history.txt.tmp
 
-# ...but bench/raw/ IS the evidence - it must be committed
+# ...but bench/raw/ IS the evidence, so it gets committed
 !bench/raw/*.log
 !bench/raw/*.txt
 
-# ---- 本地配置（含个人路径/端口，不要提交）----------------------------------
+# ...except the llama-cli capture dumps. Each is hundreds of KB, it is
+# regenerable, and it is only an input to gpu-evidence-<label>.txt. Without this
+# the blanket `!bench/raw/*.txt` above would drag ~1.3 MB per run into the repo.
+bench/raw/llama-cli-verbose*.txt
+bench/raw/llama-cli-ngl99-verbose*.txt
+
+# ---- local config (personal paths and ports — never commit) ------------------
 config.sh
 
-# ---- llama.cpp 源码与编译产物（体积大、可重新构建）-------------------------
+# ---- llama.cpp sources and build output (large, rebuildable) -----------------
 llama.cpp/
 build/
 *.o
 *.so
 *.so.*
 
-# ---- 模型权重（数 GB，绝不提交）--------------------------------------------
+# ---- model weights (gigabytes — never commit) --------------------------------
 *.gguf
 *.bin
 *.safetensors
 
-# ---- 缓存 / 编辑器 ---------------------------------------------------------
+# ---- caches / editors --------------------------------------------------------
 .cache/
 __pycache__/
 *.pyc
