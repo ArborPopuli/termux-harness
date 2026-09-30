@@ -62,7 +62,7 @@ in both runs: **GPU token generation is not faster than CPU** (9.31 < 9.86 and
 
 > ⚠️ If you take one thing from this page: **do not quote a single `llama-cli`
 > run from this device.** We did exactly that and got a figure that was wrong by
-> an order of magnitude. See `CORRECTIONS.md`.
+> an order of magnitude. See [`CORRECTIONS.md`](CORRECTIONS.md).
 
 ## 2. CPU time — the metric that actually matters on a phone
 
