@@ -104,11 +104,41 @@ echo "   output    : $RAW"
 echo "   ok device-info-$RUN.txt"
 
 # ---------- 2. Stop the server, free device memory ---------------------------
-if [ -x "$LAUNCHER" ]; then
-  echo "stopping llama-server (it would hold device memory and skew the run)"
-  bash "$LAUNCHER" --stop >/dev/null 2>&1
-  sleep 3
+# This is the step that keeps the phone alive, so it must not be skippable by
+# accident. It used to be guarded by `[ -x "$LAUNCHER" ]`, which is silently
+# false whenever the script exists but is not executable — and then the -ngl 99
+# run below allocates ~4.2 GiB on top of the server's ~4.2 GiB and OOMs Termux.
+# (We lost an SSH session to exactly that.) Existence is now the requirement, the
+# script is invoked through bash so the exec bit is irrelevant, and the result is
+# checked rather than assumed.
+if [ ! -f "$LAUNCHER" ]; then
+  echo "refusing to start: no launcher at $LAUNCHER" >&2
+  echo "  this run must stop llama-server first or the phone runs out of memory;" >&2
+  echo "  point LAUNCHER at a script that can do that" >&2
+  exit 4
 fi
+echo "stopping llama-server (it would hold device memory and skew the run)"
+bash "$LAUNCHER" --stop >/dev/null 2>&1
+sleep 3
+if bash "$LAUNCHER" --status >/dev/null 2>&1; then
+  echo "refusing to start: llama-server is still answering after --stop" >&2
+  echo "  a second -ngl 99 process now would run the phone out of memory" >&2
+  exit 5
+fi
+
+# ---------- 2b. Memory guard -------------------------------------------------
+# A 7B Q4_K_M at -ngl 99 needs ~4.2 GiB, and the Adreno shares system RAM with
+# everything else. The free figure moves with unrelated system pressure (we have
+# watched it range 3850-6391 MiB in one session), so check it rather than assume.
+# Raise NEED_MB if you disagree with the arithmetic; lower it at your own risk.
+NEED_MB="${NEED_MB:-4500}"
+AVAIL_MB=$(free -m 2>/dev/null | awk '/^Mem:/{print $7}')
+if [ -n "${AVAIL_MB:-}" ] && [ "$AVAIL_MB" -lt "$NEED_MB" ]; then
+  echo "refusing to start: ${AVAIL_MB} MiB available, ~${NEED_MB} MiB needed for -ngl 99" >&2
+  echo "  free up memory, or set NEED_MB to override" >&2
+  exit 6
+fi
+echo "available memory: ${AVAIL_MB:-unknown} MiB (need >= $NEED_MB)"
 
 # ---------- 3. Controlled A/B (the core measurement) -------------------------
 echo "llama-bench -ngl 0,99 -p 64 -n 32 -r 3"
@@ -172,7 +202,7 @@ echo "measuring CPU-seconds (96 tokens generated per offload setting)"
 echo "   ok cpu-seconds-$RUN.txt"
 
 # ---------- 6. Restore the server --------------------------------------------
-if [ -x "$LAUNCHER" ]; then
+if [ -f "$LAUNCHER" ]; then
   echo "restarting llama-server"
   bash "$LAUNCHER"
 fi

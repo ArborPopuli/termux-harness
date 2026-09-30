@@ -60,7 +60,11 @@ ensure_server() {
         return 0
     fi
     echo -e "${YELLOW}no model server on $API_BASE, starting llama-server (Vulkan GPU)...${NC}"
-    if [ -x "$LAUNCHER" ]; then
+    # Existence, not the exec bit: the script is invoked through bash, and `-x`
+    # is silently false for a file that exists but is not executable. That is not
+    # hypothetical — it is how bench/run-bench.sh skipped stopping the server and
+    # OOM-killed the phone.
+    if [ -f "$LAUNCHER" ]; then
         bash "$LAUNCHER" || { echo -e "${RED}llama-server failed to start, see $AGENT_DIR/llama-server.log${NC}"; return 1; }
     else
         echo -e "${RED}launcher not found: $LAUNCHER${NC}"; return 1
