@@ -202,20 +202,25 @@ main() {
     echo
     if [[ $REPLY =~ ^[Yy]$ ]]; then
         echo -e "${CYAN}running: $cmd${NC}"
-        local output; output=$(eval "$cmd" < /dev/null 2>&1)
+        local output rc
+        output=$(eval "$cmd" < /dev/null 2>&1); rc=$?
         if [[ -z "$output" ]]; then
             echo -e "${YELLOW}the command finished but produced no output.${NC}"
         else
             echo -e "${GREEN}output:${NC}"
             echo "$output"
         fi
-        # Record what the command *produced*, not just what was run. Without the
-        # output, a follow-up like "move it to ~/" is unanswerable: the model
-        # knows the command it issued but not the path that came back, so it
-        # guesses. Truncated, because this goes back into a 4096-token context.
+        [[ $rc -ne 0 ]] && echo -e "${YELLOW}exit status: $rc${NC}"
+        # The history carries all three parts, because each one answers a
+        # different follow-up: the intent ("I was listing .py files"), the command
+        # ("what did I run"), and the output + exit status ("what came back, and
+        # did it work"). With only the command, "move it to ~/" is unanswerable —
+        # the path the reply named was never shown. The output is truncated
+        # because it is re-injected into a 4096-token context on every turn.
         local brief
         brief=$(printf '%s' "$output" | head -c "${HISTORY_OUTPUT_CHARS:-600}" | tr '\n' ' ')
-        save_context "$user_prompt" "ran: $cmd | output: ${brief:-<no output>}"
+        save_context "$user_prompt" \
+            "intent: $explanation | ran: $cmd | exit: $rc | output: ${brief:-<no output>}"
     else
         echo -e "${CYAN}cancelled.${NC}"
     fi
