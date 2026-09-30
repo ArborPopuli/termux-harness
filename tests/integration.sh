@@ -89,10 +89,13 @@ esac
 echo
 echo "########## 4. harness: agent.sh (answering 'n', nothing is executed) ##########"
 OUT=$(echo "n" | tw 400 bash "$HERE/agent.sh" "list the 5 most recently modified python files in the home directory" 2>&1)
-if printf '%s' "$OUT" | grep -q 'CMD'; then
-    ok "agent.sh produced a [CMD] block"
+# agent.sh strips the [CMD] markers and prints the bare command, then waits at the
+# confirmation prompt — so the literal string "[CMD]" never appears in its output.
+# Reaching "cancelled" means it did parse a command out of the model's reply.
+if printf '%s' "$OUT" | grep -q 'cancelled' && ! printf '%s' "$OUT" | grep -q 'did not emit'; then
+    ok "agent.sh parsed a command and reached the confirmation prompt"
 else
-    bad "agent.sh did not produce a [CMD] block"
+    bad "agent.sh never got as far as a confirmable command"
     printf '%s\n' "$OUT" | tail -20 | sed 's/^/    /'
 fi
 
@@ -100,10 +103,11 @@ echo
 echo "########## 5. harness via the ~/.agent/agent.sh wrapper ##########"
 if [ -f "$HOME/.agent/agent.sh" ]; then
     OUT=$(echo "n" | tw 400 bash "$HOME/.agent/agent.sh" "count the .py files in the home directory" 2>&1)
-    if printf '%s' "$OUT" | grep -q 'CMD'; then
-        ok "wrapper produced a [CMD] block"
+    if printf '%s' "$OUT" | grep -q 'cancelled' && ! printf '%s' "$OUT" | grep -q 'did not emit'; then
+        ok "wrapper parsed a command and reached the confirmation prompt"
     else
-        bad "wrapper did not produce a [CMD] block"
+        bad "wrapper never got as far as a confirmable command"
+        printf '%s\n' "$OUT" | tail -20 | sed 's/^/    /'
     fi
 else
     bad "$HOME/.agent/agent.sh missing — run bash $HERE/install.sh"
