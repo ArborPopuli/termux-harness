@@ -50,7 +50,7 @@ Adreno 的矩阵/张量单元和整数点积指令,ggml 因此拿不到 cooperat
 | `agent.sh` | 轻量 Agent 循环:自然语言 → `[CMD]…[/CMD]` → 人工确认 → 执行 |
 | `start-llama-server.sh` | 拉起 `llama-server`,带 `99 → 30 → 0` 的卸载阶梯,分配失败自动降级 |
 | `install.sh` | 幂等安装;按你的 `$PREFIX` 修正 shebang;建好 `~/.agent/` |
-| `bench/run-bench.sh` | 复现本 README 里**每一个数字**,输出到 `bench/raw/*.txt` |
+| `bench/run-bench.sh` | 复现本 README 里**每一个数字**,输出到 `bench/raw/*-<label>.txt` |
 | `tests/integration.sh` | 端到端自测(健康检查/补全/harness/插件) |
 | `docs/` | 实测数据、更正登记、以及那些吃掉我们数小时的 Termux/Android 坑 |
 
@@ -112,6 +112,9 @@ bash start-llama-server.sh --stop
 - **不是沙箱。** `agent.sh` 会执行模型写出的 shell。每条命令都需人工确认,
   另有 ASCII 检查和高危指令黑名单 —— 但那是**字符串匹配,不是安全边界**。
   只在你愿意交给语言模型的机器上跑。
+  (ASCII 检查的用意是拦住模型把解释文字漏进 `[CMD]…[/CMD]`,但它同时会拒掉
+  合法的中文路径 —— 而默认搜索根 `/storage/emulated/0/` 里中文文件名很常见。
+  这种情况在 `~/.agent/config.sh` 里设 `ALLOW_NON_ASCII=1`。)
 - **不是新的推理引擎。** 就是 llama.cpp,为手机接好了线。
 - **不是严谨的基准科学。** n = 2 次运行、未控制温度状态、而且这台设备的
   负载均值一直在 ~21(来自我们看不见的进程)。详见
