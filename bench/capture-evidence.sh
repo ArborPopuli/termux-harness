@@ -22,6 +22,7 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RAW="$HERE/raw"
 BIN="${LLAMA_DIR:-$HOME/llama.cpp}/build/bin"
 MODEL="${MODEL:-$HOME/qwen2.5-coder-7b.gguf}"
+LAUNCHER="${LAUNCHER:-$HOME/termux-harness/start-llama-server.sh}"
 export LD_LIBRARY_PATH="$BIN:${LD_LIBRARY_PATH:-}"
 mkdir -p "$RAW"
 
@@ -57,6 +58,34 @@ if [ ! -f "$BENCH_FILE" ]; then
   echo "  run 'bash bench/run-bench.sh $RUN' first, or set LLAMA_BENCH_FILE" >&2
   exit 4
 fi
+
+# Stop the server first. This script starts its own `-ngl 99` process, and a 7B
+# Q4_K_M needs ~4.2 GiB of device memory — on top of the ~4.2 GiB a running
+# llama-server already holds. Two of them do not fit, and Android resolves that
+# by killing Termux, which takes the SSH session with it. Same guard as
+# bench/run-bench.sh, for the same reason.
+if [ ! -f "$LAUNCHER" ]; then
+  echo "refusing to start: no launcher at $LAUNCHER" >&2
+  echo "  this script must stop llama-server first or the phone runs out of memory" >&2
+  exit 7
+fi
+echo "stopping llama-server (it would hold device memory and skew the capture)"
+bash "$LAUNCHER" --stop >/dev/null 2>&1
+sleep 3
+if bash "$LAUNCHER" --status >/dev/null 2>&1; then
+  echo "refusing to start: llama-server is still answering after --stop" >&2
+  echo "  a second -ngl 99 process now would run the phone out of memory" >&2
+  exit 8
+fi
+
+NEED_MB="${NEED_MB:-4500}"
+AVAIL_MB=$(free -m 2>/dev/null | awk '/^Mem:/{print $7}')
+if [ -n "${AVAIL_MB:-}" ] && [ "$AVAIL_MB" -lt "$NEED_MB" ]; then
+  echo "refusing to start: ${AVAIL_MB} MiB available, ~${NEED_MB} MiB needed for -ngl 99" >&2
+  echo "  free up memory, or set NEED_MB to override" >&2
+  exit 9
+fi
+echo "available memory: ${AVAIL_MB:-unknown} MiB (need >= $NEED_MB)"
 
 echo "starting one -ngl 99 run and sampling /proc alongside it"
 "$BIN/llama-cli" -m "$MODEL" -p "hello" -ngl 99 -n 8 -v </dev/null >"$OUT" 2>&1 &
@@ -106,5 +135,10 @@ echo "summarising"
   echo "--- [6] model reply produced during that run ---"
   sed -n '/^> /,/^$/p' "$OUT" | head -4
 } > "$GPU" 2>&1
+
+if [ -f "$LAUNCHER" ]; then
+  echo "restarting llama-server"
+  bash "$LAUNCHER"
+fi
 
 cat "$GPU"
