@@ -107,6 +107,21 @@ else
 fi
 
 echo
+echo "########## 7. llama-server is told apart from anything else on the port ##########"
+# HTTP 200 on /health proves nothing — an unrelated model server on the same port
+# answers 200 as well, and mistaking it for llama-server makes --status lie, stops
+# the launcher from starting, and makes run-bench.sh refuse to run. Both scripts
+# must therefore require llama.cpp's body. This is a canary: reverting either one
+# to a bare HTTP-200 check removes the string and fails here.
+for f in agent.sh start-llama-server.sh; do
+    if grep -q '"status":"ok"' "$HERE/$f"; then
+        ok "$f requires llama.cpp's health body"
+    else
+        bad "$f accepts any HTTP 200 on /health"
+    fi
+done
+
+echo
 echo "=================================================="
 printf 'passed %d, failed %d\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ] || exit 1

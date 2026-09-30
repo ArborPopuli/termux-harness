@@ -56,9 +56,16 @@ Other rules:
 
 # Start llama-server if it is not already answering (replaces the old check_ollama).
 ensure_server() {
-    if curl -sf -m 3 "$API_BASE/health" >/dev/null 2>&1; then
-        return 0
-    fi
+    # Same check as start-llama-server.sh, for the same reason: HTTP 200 on
+    # /health is not enough, because any other server on this port would be
+    # mistaken for llama-server and the launcher would be skipped. llama.cpp
+    # answers {"status":"ok"}; whitespace is stripped so `{"status": "ok"}`
+    # still matches, and the 503 it returns while loading still fails.
+    local body
+    body=$(curl -sf -m 3 "$API_BASE/health" 2>/dev/null)
+    case "$(printf '%s' "$body" | tr -d '[:space:]')" in
+        *'"status":"ok"'*) return 0 ;;
+    esac
     echo -e "${YELLOW}no model server on $API_BASE, starting llama-server (Vulkan GPU)...${NC}"
     # Existence, not the exec bit: the script is invoked through bash, and `-x`
     # is silently false for a file that exists but is not executable. That is not
