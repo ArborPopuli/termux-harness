@@ -1,15 +1,37 @@
 #!/data/data/com.termux/files/usr/bin/bash
 # bench/run-bench.sh — reproduce every number quoted in the README.
 #
+# Usage:
+#   bash bench/run-bench.sh [label] [--force]
+#
+#   [label]   Run tag. Every artifact is written as <name>-<label>.<ext> under
+#             bench/raw/, so a fresh run never overwrites published evidence.
+#             The README cites bench/raw/llama-bench-run1.txt and
+#             llama-bench-run2.txt, i.e. `run-bench.sh run1` and `run-bench.sh
+#             run2`. Defaults to a UTC timestamp.
+#   [--force] Permit overwriting artifacts that already exist. Without it the
+#             script stops before doing any work, rather than clobbering a run
+#             that is already committed.
+#
 # Stops llama-server first: it holds ~4.2 GiB of device memory, which would
 # skew (or break) the -ngl 99 measurements. Restarts it at the end.
-#
-# Output: ./raw/*.txt   (these raw files are what the README cites)
 
 set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RAW="$HERE/raw"
 mkdir -p "$RAW"
+
+RUN=""
+FORCE=0
+for a in "$@"; do
+  case "$a" in
+    --force) FORCE=1 ;;
+    -*)      echo "unknown option: $a" >&2; exit 2 ;;
+    *)       if [ -z "$RUN" ]; then RUN="$a"
+             else echo "usage: run-bench.sh [label] [--force]" >&2; exit 2; fi ;;
+  esac
+done
+[ -n "$RUN" ] || RUN="run$(date -u +%Y%m%d-%H%M%S)"
 
 LLAMA_DIR="${LLAMA_DIR:-$HOME/llama.cpp}"
 MODEL="${MODEL:-$HOME/qwen2.5-coder-7b.gguf}"
@@ -17,12 +39,29 @@ LAUNCHER="${LAUNCHER:-$HOME/termux-harness/start-llama-server.sh}"
 BIN="$LLAMA_DIR/build/bin"
 export LD_LIBRARY_PATH="$BIN:${LD_LIBRARY_PATH:-}"
 
-echo "▶️  采集开始 $(date -Iseconds)"
+DEVICE="$RAW/device-info-$RUN.txt"
+BENCH="$RAW/llama-bench-$RUN.txt"
+GPU="$RAW/gpu-evidence-$RUN.txt"
+CPUSEC="$RAW/cpu-seconds-$RUN.txt"
+VERBOSE="$RAW/llama-cli-verbose-$RUN.txt"
+
+if [ "$FORCE" -ne 1 ]; then
+  for f in "$DEVICE" "$BENCH" "$GPU" "$CPUSEC" "$VERBOSE"; do
+    if [ -e "$f" ]; then
+      echo "refusing to overwrite $f" >&2
+      echo "  (re-run with --force if that is what you want)" >&2
+      exit 3
+    fi
+  done
+fi
+
+echo "collecting $(date -Iseconds)"
+echo "   run label : $RUN"
 echo "   llama.cpp : $LLAMA_DIR"
 echo "   model     : $MODEL"
 echo "   output    : $RAW"
 
-# ---------- 1. 环境快照 ------------------------------------------------------
+# ---------- 1. Environment snapshot ------------------------------------------
 {
   echo "=== collected: $(date -Iseconds) ==="
   echo
@@ -33,7 +72,13 @@ echo "   output    : $RAW"
     printf '%-28s = ' "$p"; getprop "$p" 2>/dev/null || echo '(denied)'
   done
   echo
-  echo "--- kernel ---";  uname -a
+  echo "--- kernel ---"
+  # Do NOT use `uname -a` here. It embeds the vendor build string, e.g.
+  #   6.6.118-android15-8-gf17133276a57-abogki518694926-4k #1 SMP PREEMPT ...
+  # which is a per-ROM fingerprint. Keep the release (which is what the report
+  # needs) and the machine; drop the -<commits>-g<hash> build suffix.
+  printf 'Linux %s %s Android\n' \
+    "$(uname -r | sed -E 's/-([0-9]+-)?g[0-9a-f]{7,}.*$//')" "$(uname -m)"
   echo "--- cores ---";   nproc
   echo "--- cpuinfo ---"; grep -m1 -E 'Hardware|model name' /proc/cpuinfo
   echo "--- cpu features (selected) ---"
@@ -55,51 +100,49 @@ echo "   output    : $RAW"
   echo "--- relevant termux packages ---"
   pkg list-installed 2>/dev/null \
     | grep -E '^(clang|cmake|shaderc|spirv-tools|spirv-headers|vulkan-loader|vulkan-headers|glslang|python|curl|git)/'
-} > "$RAW/device-info.txt" 2>&1
-echo "   ✓ device-info.txt"
+} > "$DEVICE" 2>&1
+echo "   ok device-info-$RUN.txt"
 
-# ---------- 2. 停掉服务，腾出显存 --------------------------------------------
+# ---------- 2. Stop the server, free device memory ---------------------------
 if [ -x "$LAUNCHER" ]; then
-  echo "⏸  停止 llama-server（避免占用显存污染测量）"
+  echo "stopping llama-server (it would hold device memory and skew the run)"
   bash "$LAUNCHER" --stop >/dev/null 2>&1
   sleep 3
 fi
 
-# ---------- 3. 受控 A/B（核心数据）------------------------------------------
-echo "▶️  llama-bench -ngl 0,99 -p 64 -n 32 -r 3"
-"$BIN/llama-bench" -m "$MODEL" -ngl 0,99 -p 64 -n 32 -r 3 \
-  > "$RAW/llama-bench-raw.txt" 2>&1
-echo "   ✓ llama-bench-raw.txt  (exit=$?)"
+# ---------- 3. Controlled A/B (the core measurement) -------------------------
+echo "llama-bench -ngl 0,99 -p 64 -n 32 -r 3"
+"$BIN/llama-bench" -m "$MODEL" -ngl 0,99 -p 64 -n 32 -r 3 > "$BENCH" 2>&1
+echo "   ok llama-bench-$RUN.txt  (exit=$?)"
 
-# ---------- 4. 设备能力 + 层卸载证据 ----------------------------------------
-# 注意 `</dev/null`：不加的话 llama-cli 会停在交互式提示符等 stdin，
-# 脚本会永久挂住（我们踩过这个坑）。
-echo "▶️  verbose 启动，抓设备能力与层分配"
-"$BIN/llama-cli" -m "$MODEL" -p hi -ngl 99 -n 1 -v </dev/null \
-  > "$RAW/llama-cli-verbose.txt" 2>&1
+# ---------- 4. Device capability + layer-offload evidence --------------------
+# Note `</dev/null`: without it llama-cli stops at the interactive prompt waiting
+# on stdin and the script hangs forever (we have hit this).
+echo "verbose launch, capturing device capability and layer placement"
+"$BIN/llama-cli" -m "$MODEL" -p hi -ngl 99 -n 1 -v </dev/null > "$VERBOSE" 2>&1
 
 {
   echo "=== collected: $(date -Iseconds) ==="
   echo
   echo "--- 1. ggml_vulkan device capability line ---"
-  grep -m1 'ggml_vulkan: 0 =' "$RAW/llama-cli-verbose.txt"
+  grep -m1 'ggml_vulkan: 0 =' "$VERBOSE"
   echo
   echo "--- 2. device enumeration as llama.cpp sees it ---"
   "$BIN/llama-cli" --list-devices 2>&1
   echo
   echo "--- 3. layer offload + buffer sizes ---"
   grep -E 'offloaded [0-9]+/[0-9]+ layers|model buffer size|KV buffer size|compute buffer size|using device' \
-    "$RAW/llama-cli-verbose.txt"
+    "$VERBOSE"
   echo
   echo "--- 4. number of layers assigned to the GPU ---"
   echo -n "layers assigned to Vulkan0: "
-  grep -c 'assigned to device Vulkan0' "$RAW/llama-cli-verbose.txt"
-} > "$RAW/gpu-evidence.txt" 2>&1
-echo "   ✓ gpu-evidence.txt"
+  grep -c 'assigned to device Vulkan0' "$VERBOSE"
+} > "$GPU" 2>&1
+echo "   ok gpu-evidence-$RUN.txt"
 
-# ---------- 5. CPU-秒：手机端真正该看的指标 ---------------------------------
-# 读 /proc/<pid>/stat 的 utime+stime（内核计数器，非估算）
-echo "▶️  CPU-秒 测量（每档生成 96 token）"
+# ---------- 5. CPU-seconds: the metric that actually matters on a phone ------
+# Reads utime+stime from /proc/<pid>/stat — a kernel counter, not an estimate.
+echo "measuring CPU-seconds (96 tokens generated per offload setting)"
 {
   echo "=== collected: $(date -Iseconds) ==="
   echo "method: sample (utime+stime) from /proc/<pid>/stat every 1s, take the max"
@@ -107,10 +150,14 @@ echo "▶️  CPU-秒 测量（每档生成 96 token）"
   echo
   for NGL in 99 0; do
     START=$(date +%s)
-    "$BIN/llama-cli" -m "$MODEL" -p "你好" -ngl "$NGL" -n 96 </dev/null >/dev/null 2>&1 &
+    "$BIN/llama-cli" -m "$MODEL" -p "hello" -ngl "$NGL" -n 96 </dev/null >/dev/null 2>&1 &
     PID=$!
     MAXT=0
     while kill -0 "$PID" 2>/dev/null; do
+      # fields 14/15 of /proc/<pid>/stat are utime/stime. comm (field 2) is
+      # parenthesised and may contain spaces, which would shift the columns —
+      # fine for llama-cli, but read the whole tail after the closing paren if
+      # you retarget this.
       T=$(awk '{print $14+$15}' "/proc/$PID/stat" 2>/dev/null)
       if [ -n "${T:-}" ] && [ "$T" -gt "$MAXT" ]; then MAXT=$T; fi
       sleep 1
@@ -121,15 +168,15 @@ echo "▶️  CPU-秒 测量（每档生成 96 token）"
            "$NGL" "$RC" "$EL" "$MAXT" "$(( MAXT / 100 ))"
     sleep 5
   done
-} > "$RAW/cpu-seconds.txt" 2>&1
-echo "   ✓ cpu-seconds.txt"
+} > "$CPUSEC" 2>&1
+echo "   ok cpu-seconds-$RUN.txt"
 
-# ---------- 6. 恢复服务 ------------------------------------------------------
+# ---------- 6. Restore the server --------------------------------------------
 if [ -x "$LAUNCHER" ]; then
-  echo "▶️  重新启动 llama-server"
+  echo "restarting llama-server"
   bash "$LAUNCHER"
 fi
 
 echo
-echo "✅ 采集完成。原始文件在 $RAW"
-ls -la "$RAW"
+echo "done. raw files for run '$RUN':"
+ls -la "$RAW"/*-"$RUN".*

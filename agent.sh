@@ -1,14 +1,14 @@
 #!/data/data/com.termux/files/usr/bin/bash
-# agent.sh — Termux 端轻量 Agent Harness
+# agent.sh — a small agent harness for Termux.
 #
-# 由本地 llama.cpp (llama-server) 驱动，OpenAI 兼容端点。
-# 默认使用 Qwen2.5-Coder-7B + Vulkan GPU 加速（Adreno）。
+# Driven by a local llama.cpp server (llama-server) over its OpenAI-compatible
+# endpoint. Defaults to Qwen2.5-Coder-7B with Vulkan GPU offload (Adreno).
 #
-# 用法：
-#   bash agent.sh "找出 Download 目录下最近 3 天的 jpg"
-#   bash agent.sh /<plugin> [args]        执行插件
+# Usage:
+#   bash agent.sh "find jpgs from the last 3 days in Download"
+#   bash agent.sh /<plugin> [args]        run a plugin
 #
-# 配置：~/.agent/config.sh（可选，见 config.example.sh）
+# Config: ~/.agent/config.sh (optional, see config.example.sh)
 
 set -uo pipefail
 
@@ -17,13 +17,16 @@ PLUGIN_DIR="$AGENT_DIR/plugins"
 HISTORY_FILE="$AGENT_DIR/history.txt"
 LAUNCHER="${LAUNCHER:-$HOME/termux-harness/start-llama-server.sh}"
 
-# ---- 默认配置（可被 ~/.agent/config.sh 覆盖）---------------------------------
+# ---- defaults (override in ~/.agent/config.sh) ------------------------------
 MODEL="${MODEL:-qwen2.5-coder-7b}"
 API_HOST="${API_HOST:-127.0.0.1}"
 API_PORT="${API_PORT:-8080}"
 MAX_TOKENS="${MAX_TOKENS:-256}"
 TEMPERATURE="${TEMPERATURE:-0.2}"
 HISTORY_TURNS="${HISTORY_TURNS:-6}"
+# Language the model is told to write its explanation in. The command half is
+# always shell, i.e. English. Set REPLY_LANG=en in config.sh for English replies.
+REPLY_LANG="${REPLY_LANG:-zh}"
 # -----------------------------------------------------------------------------
 
 [ -f "$AGENT_DIR/config.sh" ] && . "$AGENT_DIR/config.sh"
@@ -31,27 +34,36 @@ API_BASE="http://${API_HOST}:${API_PORT}"
 
 GREEN='\033[0;32m'; YELLOW='\033[1;33m'; CYAN='\033[0;36m'; RED='\033[0;31m'; NC='\033[0m'
 
-SYSTEM_PROMPT="你是一个运行在Android Termux环境下的终端助手。
-你的回答必须严格分为两部分：
-第一部分【思路】：用简单易懂的中文解释你打算怎么做（不超过3句话）。
-第二部分【命令】：给出可以直接执行的单行Shell命令，必须用 [CMD] 和 [/CMD] 包裹。
-例如：[CMD]find /storage/emulated/0/ -iname '*.jpg' -mtime -3[/CMD]
-绝对不要输出任何多余的文字、Markdown代码块或其他标记。
-其他规则：
-1. 专注文件检索与系统操作，不做任何数学题。
-2. 默认搜索路径为 /storage/emulated/0/。
-3. 严禁生成任何需要等待用户输入的命令。"
+case "$REPLY_LANG" in
+    zh) REPLY_LANG_NAME="Chinese" ;;
+    en) REPLY_LANG_NAME="English" ;;
+    *)  REPLY_LANG_NAME="$REPLY_LANG" ;;
+esac
 
-# 确保 llama-server 在跑（替代原先的 check_ollama）
+SYSTEM_PROMPT="You are a terminal assistant running inside Android Termux.
+Split your answer into exactly two parts and output nothing else — no extra
+prose, no Markdown fences, no other markers.
+
+Part 1, the explanation: say in ${REPLY_LANG_NAME} what you are about to do, in
+at most 3 sentences.
+Part 2, the command: one single-line shell command, wrapped in [CMD] and [/CMD].
+For example: [CMD]find /storage/emulated/0/ -iname '*.jpg' -mtime -3[/CMD]
+
+Other rules:
+1. File search and system operations only. Do not solve maths problems.
+2. The default search root is /storage/emulated/0/.
+3. Never emit a command that waits for user input."
+
+# Start llama-server if it is not already answering (replaces the old check_ollama).
 ensure_server() {
     if curl -sf -m 3 "$API_BASE/health" >/dev/null 2>&1; then
         return 0
     fi
-    echo -e "${YELLOW}⚠️  本地模型服务未运行，正在拉起 llama-server（Vulkan GPU）...${NC}"
+    echo -e "${YELLOW}no model server on $API_BASE, starting llama-server (Vulkan GPU)...${NC}"
     if [ -x "$LAUNCHER" ]; then
-        bash "$LAUNCHER" || { echo -e "${RED}❌ llama-server 启动失败，见 $AGENT_DIR/llama-server.log${NC}"; return 1; }
+        bash "$LAUNCHER" || { echo -e "${RED}llama-server failed to start, see $AGENT_DIR/llama-server.log${NC}"; return 1; }
     else
-        echo -e "${RED}❌ 找不到启动脚本：$LAUNCHER${NC}"; return 1
+        echo -e "${RED}launcher not found: $LAUNCHER${NC}"; return 1
     fi
 }
 
@@ -60,12 +72,13 @@ get_context() {
 }
 
 save_context() {
-    echo "用户: $1" >> "$HISTORY_FILE"
-    echo "助手: $2" >> "$HISTORY_FILE"
+    echo "user: $1" >> "$HISTORY_FILE"
+    echo "agent: $2" >> "$HISTORY_FILE"
     tail -n "$HISTORY_TURNS" "$HISTORY_FILE" > "$HISTORY_FILE.tmp" && mv "$HISTORY_FILE.tmp" "$HISTORY_FILE"
 }
 
-# 用 python3 构造 JSON —— 避免在 bash 里手工转义引号/换行/中文
+# Build the JSON with python3 — hand-escaping quotes, newlines and non-ASCII in
+# bash is a losing game.
 build_payload() {
     python3 - "$1" "$2" "$MAX_TOKENS" "$TEMPERATURE" <<'PY'
 import json, sys
@@ -100,14 +113,14 @@ except Exception:
 generate_response() {
     local context payload resp content
     context=$(get_context)
-    payload=$(build_payload "$SYSTEM_PROMPT" "--- 历史对话 ---
+    payload=$(build_payload "$SYSTEM_PROMPT" "--- conversation history ---
 $context
---- 历史结束 ---
+--- end of history ---
 
-用户新需求：$1")
+New request: $1")
     resp=$(curl -s -m 600 -X POST "$API_BASE/v1/chat/completions" \
                 -H 'Content-Type: application/json' -d "$payload")
-    if [ -z "$resp" ]; then echo "__API_ERROR__ 空响应（服务可能已崩溃）"; return; fi
+    if [ -z "$resp" ]; then echo "__API_ERROR__ empty response (server may have died)"; return; fi
     content=$(printf '%s' "$resp" | parse_content)
     printf '%s' "$content"
 }
@@ -116,73 +129,85 @@ run_plugin() {
     local plugin_name="$1"; shift
     local plugin_file="$PLUGIN_DIR/${plugin_name}.sh"
     if [[ -f "$plugin_file" ]]; then
-        echo -e "${CYAN}🔌 加载插件: $plugin_name${NC}"
+        echo -e "${CYAN}loading plugin: $plugin_name${NC}"
         source "$plugin_file" "$@"
     else
-        echo -e "${YELLOW}⚠️ 插件 $plugin_name 不存在。可用插件：${NC}"
+        echo -e "${YELLOW}no such plugin: $plugin_name. Available:${NC}"
         ls -1 "$PLUGIN_DIR" 2>/dev/null | sed 's/\.sh$//' | awk '{print "  - /"$1}'
     fi
 }
 
 main() {
-    if [[ $# -eq 0 ]]; then echo -e "用法：$0 \"你的需求\""; exit 1; fi
+    if [[ $# -eq 0 ]]; then echo -e "usage: $0 \"what you want\""; exit 1; fi
     if [[ "$1" == /* ]]; then run_plugin "${1:1}" "${@:2}"; exit 0; fi
 
     ensure_server || exit 1
 
     local user_prompt="$*"
-    echo -e "${CYAN}🧠 思考中 (模型: $MODEL @ $API_BASE)...${NC}"
+    echo -e "${CYAN}thinking (model: $MODEL @ $API_BASE)...${NC}"
     local raw_response; raw_response=$(generate_response "$user_prompt")
 
     if [[ "$raw_response" == __API_ERROR__* || "$raw_response" == __PARSE_ERROR__* ]]; then
-        echo -e "${RED}❌ 模型服务返回错误：${NC}"
+        echo -e "${RED}model server returned an error:${NC}"
         echo "$raw_response"
         exit 1
     fi
 
-    # 严格提取 [CMD]...[/CMD]
+    # Extract exactly [CMD]...[/CMD]
     local cmd; cmd=$(echo "$raw_response" | sed -n 's/.*\[CMD\]//;s/\[\/CMD\].*//p' | tr -d '\r')
     local explanation; explanation=$(echo "$raw_response" | sed 's/\[CMD\].*//g' | tr -d '\r' | xargs)
 
     if [[ -z "$cmd" ]]; then
-        echo -e "${RED}❌ 模型未按规定格式输出 [CMD]命令[/CMD]。${NC}"
-        echo -e "${YELLOW}原始回复：$raw_response${NC}"
+        echo -e "${RED}model did not emit [CMD]command[/CMD].${NC}"
+        echo -e "${YELLOW}raw reply: $raw_response${NC}"
         exit 1
     fi
 
-    # 安全检查 1：命令必须是纯 ASCII
-    if echo "$cmd" | LC_ALL=C grep -q '[^ -~]'; then
-        echo -e "${RED}❌ 拦截：生成的命令中包含非 ASCII 字符（可能是中文）。${NC}"
+    # Check 1: the command should be plain ASCII. The usual cause of a non-ASCII
+    # command is the model leaking prose into [CMD]...[/CMD] — but a legitimate
+    # command can contain a CJK path, and the default search root is
+    # /storage/emulated/0/, where Chinese filenames are common. Set
+    # ALLOW_NON_ASCII=1 in config.sh to permit those.
+    if [ "${ALLOW_NON_ASCII:-0}" != "1" ] && printf '%s' "$cmd" | LC_ALL=C grep -q '[^ -~]'; then
+        echo -e "${RED}blocked: the generated command contains non-ASCII characters.${NC}"
+        echo -e "${YELLOW}If this is a legitimate CJK path, set ALLOW_NON_ASCII=1 in $AGENT_DIR/config.sh${NC}"
         exit 1
     fi
 
-    # 安全检查 2：高危指令
-    DANGEROUS_PATTERNS="rm -rf /|rm -rf ~|mkfs|dd if=|dd of=/dev/|chmod -R 777 /|shutdown|reboot"
-    if echo "$cmd" | grep -qE "$DANGEROUS_PATTERNS"; then
-        echo -e "${RED}🚨 高危警告：检测到危险指令，已拦截！${NC}"
+    # Check 2: destructive commands. The root/home patterns are anchored so that
+    # a legitimate path is not caught: `rm -rf /storage/emulated/0/tmp` must pass
+    # while `rm -rf /` must not. Note this is string matching on a single line —
+    # it is a speed bump, not a security boundary (see README).
+    DANGEROUS_PATTERNS='rm[[:space:]]+-[a-zA-Z]+[[:space:]]+(/|~|\$HOME)(/|\*)?([[:space:]]|$)'
+    DANGEROUS_PATTERNS="$DANGEROUS_PATTERNS"'|mkfs'
+    DANGEROUS_PATTERNS="$DANGEROUS_PATTERNS"'|dd[[:space:]]+.*(if|of)=/dev/'
+    DANGEROUS_PATTERNS="$DANGEROUS_PATTERNS"'|chmod[[:space:]]+-R[[:space:]]+777[[:space:]]+(/|~)([[:space:]]|$)'
+    DANGEROUS_PATTERNS="$DANGEROUS_PATTERNS"'|shutdown|reboot'
+    if printf '%s' "$cmd" | grep -qE "$DANGEROUS_PATTERNS"; then
+        echo -e "${RED}blocked: dangerous pattern detected.${NC}"
         exit 1
     fi
 
-    echo -e "${GREEN}==================== 思路与解释 ====================${NC}"
+    echo -e "${GREEN}==================== explanation ====================${NC}"
     echo -e "${NC}$explanation${NC}"
-    echo -e "${GREEN}==================== 生成的命令 ====================${NC}"
+    echo -e "${GREEN}==================== command     ====================${NC}"
     echo -e "${YELLOW}$cmd${NC}"
     echo -e "${GREEN}====================================================${NC}"
 
-    read -p "是否执行该命令？(y/n): " -n 1 -r
+    read -p "run this command? (y/n): " -n 1 -r
     echo
     if [[ $REPLY =~ ^[Yy]$ ]]; then
-        echo -e "${CYAN}🚀 正在执行：$cmd${NC}"
+        echo -e "${CYAN}running: $cmd${NC}"
         local output; output=$(eval "$cmd" < /dev/null 2>&1)
         if [[ -z "$output" ]]; then
-            echo -e "${YELLOW}💡 命令执行完毕，但没有产生任何输出。${NC}"
+            echo -e "${YELLOW}the command finished but produced no output.${NC}"
         else
-            echo -e "${GREEN}✅ 执行结果：${NC}"
+            echo -e "${GREEN}output:${NC}"
             echo "$output"
         fi
-        save_context "$user_prompt" "思路: $explanation | 执行了: $cmd"
+        save_context "$user_prompt" "explanation: $explanation | ran: $cmd"
     else
-        echo -e "${CYAN}🚫 已取消。${NC}"
+        echo -e "${CYAN}cancelled.${NC}"
     fi
 }
 

@@ -57,7 +57,7 @@ expect materially better numbers from the same configuration.
 | `agent.sh` | A small agent loop: natural language → `[CMD]…[/CMD]` → confirm → run |
 | `start-llama-server.sh` | Brings up `llama-server` with an offload ladder (`99 → 30 → 0`) that degrades automatically on allocation failure |
 | `install.sh` | Idempotent install; fixes shebangs for your `$PREFIX`; wires up `~/.agent/` |
-| `bench/run-bench.sh` | Reproduces **every number in this README**, writes `bench/raw/*.txt` |
+| `bench/run-bench.sh` | Reproduces **every number in this README**, writes `bench/raw/*-<label>.txt` |
 | `tests/integration.sh` | End-to-end self-test (health, completions, harness, plugins) |
 | `docs/` | Measurements, corrections, and the Termux/Android gotchas that cost us hours |
 
@@ -121,6 +121,10 @@ it doesn't have to be yours.
   confirms each command, and there is an ASCII check plus a dangerous-pattern
   blocklist — but that blocklist is string matching, not a security boundary.
   Only run it on a machine you're willing to hand to a language model.
+  (The ASCII check exists to catch the model leaking prose into `[CMD]…[/CMD]`,
+  but it also rejects legitimate CJK paths — and the default search root,
+  `/storage/emulated/0/`, is full of them. Set `ALLOW_NON_ASCII=1` in
+  `~/.agent/config.sh` if that is your situation.)
 - **Not a new inference engine.** It's llama.cpp, wired up for a phone.
 - **Not benchmark-grade science.** n = 2 runs, uncontrolled thermal state, and a
   device whose load average sat at ~21 from processes we can't see. See the

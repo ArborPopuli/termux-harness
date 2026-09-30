@@ -22,8 +22,9 @@ PORT="${PORT:-8080}"
 HOST="${HOST:-127.0.0.1}"
 CTX="${CTX:-4096}"
 # GPU offload ladder: try full offload first, drop to a safe value if it dies.
-# -ngl 99 (all 28 layers) needs ~4.2 GiB of the Adreno's shared memory;
-# -ngl 30 is the documented fallback when the device is short on memory.
+# The model has 29 blocks as llama.cpp counts them (28 transformer layers plus the
+# output layer); -ngl 99 puts all of them on the Adreno and needs ~4.2 GiB of its
+# shared memory. -ngl 30 is the fallback when the device is short on memory.
 NGL_LADDER="${NGL_LADDER:-99 30 0}"
 LOG="${LOG:-$HOME/.agent/llama-server.log}"
 PIDFILE="${PIDFILE:-$HOME/.agent/llama-server.pid}"
@@ -47,11 +48,11 @@ is_up() { curl -sf -m 3 "$BASE_URL/health" >/dev/null 2>&1; }
 
 do_status() {
     if is_up; then
-        c_ok "✅ llama-server 正在运行  pid=$(server_pid 2>/dev/null || echo '?')  $BASE_URL"
+        c_ok "llama-server is up  pid=$(server_pid 2>/dev/null || echo '?')  $BASE_URL"
         curl -s -m 5 "$BASE_URL/health"; echo
         return 0
     fi
-    c_warn "⚠️  llama-server 未在 $BASE_URL 响应"
+    c_warn "llama-server is not answering on $BASE_URL"
     return 1
 }
 
@@ -61,9 +62,9 @@ do_stop() {
         kill "$p" 2>/dev/null
         for _ in $(seq 1 20); do kill -0 "$p" 2>/dev/null || break; sleep 0.5; done
         kill -9 "$p" 2>/dev/null
-        c_ok "🛑 已停止 llama-server (pid=$p)"
+        c_ok "stopped llama-server (pid=$p)"
     else
-        c_warn "没有正在运行的 llama-server"
+        c_warn "no llama-server running"
     fi
     rm -f "$PIDFILE"
 }
@@ -71,7 +72,7 @@ do_stop() {
 # Start one process and wait until /health answers 200 or the process dies.
 try_ngl() {
     local ngl="$1" p
-    c_warn "▶️  尝试启动：-ngl $ngl  (port $PORT, ctx $CTX)"
+    c_warn "trying -ngl $ngl  (port $PORT, ctx $CTX)"
     {
         echo "=== start $(date -Iseconds) ngl=$ngl model=$MODEL ==="
     } >> "$LOG"
@@ -89,21 +90,21 @@ try_ngl() {
     local waited=0
     while [ "$waited" -lt "$HEALTH_TIMEOUT" ]; do
         if ! kill -0 "$p" 2>/dev/null; then
-            c_err "❌ -ngl $ngl 启动失败：进程已退出（见 $LOG）"
+            c_err "-ngl $ngl failed: process exited (see $LOG)"
             return 1
         fi
         if is_up; then
-            c_ok "✅ llama-server 就绪 (pid=$p, -ngl $ngl)  $BASE_URL"
+            c_ok "llama-server ready (pid=$p, -ngl $ngl)  $BASE_URL"
             local dev
             dev=$(grep -oE 'Vulkan0 : [^(]*' "$LOG" 2>/dev/null | tail -1)
             [ -n "$dev" ] && c_ok "   GPU: $dev"
             return 0
         fi
         sleep 3; waited=$((waited + 3))
-        [ $((waited % 30)) -eq 0 ] && c_warn "   ...加载中 ${waited}s（7B 首次载入显存需要时间）"
+        [ $((waited % 30)) -eq 0 ] && c_warn "   ...loading ${waited}s (a 7B model takes a while to land in device memory)"
     done
 
-    c_err "❌ -ngl $ngl 超时 ${HEALTH_TIMEOUT}s 仍未就绪，杀掉重试"
+    c_err "-ngl $ngl not ready after ${HEALTH_TIMEOUT}s, killing and retrying"
     kill -9 "$p" 2>/dev/null
     rm -f "$PIDFILE"
     return 1
@@ -115,11 +116,11 @@ main() {
         --stop)   do_stop;   exit 0 ;;
     esac
 
-    [ -x "$LLAMA_BIN" ] || { c_err "❌ 找不到 llama-server: $LLAMA_BIN"; exit 1; }
-    [ -f "$MODEL" ]     || { c_err "❌ 找不到模型: $MODEL"; exit 1; }
+    [ -x "$LLAMA_BIN" ] || { c_err "llama-server not found: $LLAMA_BIN"; exit 1; }
+    [ -f "$MODEL" ]     || { c_err "model not found: $MODEL"; exit 1; }
 
     if is_up; then
-        c_ok "✅ llama-server 已在运行，无需重复启动  $BASE_URL"
+        c_ok "llama-server already running, nothing to do  $BASE_URL"
         exit 0
     fi
     # stale pidfile from a crashed run
@@ -129,11 +130,11 @@ main() {
     local ngl
     for ngl in $NGL_LADDER; do
         if try_ngl "$ngl"; then exit 0; fi
-        c_warn "⬇️  降级到下一个 offload 档位..."
+        c_warn "dropping to the next offload step..."
         sleep 2
     done
 
-    c_err "❌ 所有 -ngl 档位均失败。最后 40 行日志："
+    c_err "every -ngl step failed. Last 40 lines of the log:"
     tail -40 "$LOG"
     exit 1
 }
