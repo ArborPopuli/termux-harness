@@ -1,0 +1,31 @@
+# ---- 运行期产物 ------------------------------------------------------------
+*.log
+*.pid
+history.txt
+history.txt.tmp
+
+# ...but bench/raw/ IS the evidence - it must be committed
+!bench/raw/*.log
+!bench/raw/*.txt
+
+# ---- 本地配置（含个人路径/端口，不要提交）----------------------------------
+config.sh
+
+# ---- llama.cpp 源码与编译产物（体积大、可重新构建）-------------------------
+llama.cpp/
+build/
+*.o
+*.so
+*.so.*
+
+# ---- 模型权重（数 GB，绝不提交）--------------------------------------------
+*.gguf
+*.bin
+*.safetensors
+
+# ---- 缓存 / 编辑器 ---------------------------------------------------------
+.cache/
+__pycache__/
+*.pyc
+.viminfo
+.DS_Store

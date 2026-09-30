@@ -1,0 +1,33 @@
+# Evidence that the process really talks to the Adreno driver.
+# Sampled from /proc/<pid>/{fd,maps} while llama-cli -ngl 99 was alive.
+# (kgsl sysfs utilisation nodes are NOT readable without root — see docs/MEASUREMENTS.md)
+
+PID=12319  ngl=99
+--- 00:00:12 ---
+fd_kgsl_open=0
+maps_freedreno=3
+maps_lvp=3
+maps_libvulkan=9
+rss_kb=64940
+threads=2
+--- 00:00:15 ---
+fd_kgsl_open=1
+maps_freedreno=3
+maps_lvp=3
+maps_libvulkan=9
+rss_kb=144344
+threads=14
+--- 00:00:18 ---
+fd_kgsl_open=1
+maps_freedreno=3
+maps_lvp=3
+maps_libvulkan=9
+rss_kb=75108
+threads=14
+--- 00:00:21 ---
+fd_kgsl_open=1
+maps_freedreno=3
+maps_lvp=3
+maps_libvulkan=9
+rss_kb=573220
+threads=14

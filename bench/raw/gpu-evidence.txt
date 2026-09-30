@@ -1,0 +1,64 @@
+=== GPU evidence — why we claim the work really ran on the Adreno ===
+assembled from two captures; the automated re-capture was cut short when we
+ran the phone out of memory ourselves (see docs/CORRECTIONS.md §6)
+
+--- [1] device capability line, as ggml prints it ---
+ggml_vulkan: 0 = Adreno (TM) 830 (turnip Mesa driver) | uma: 1 | fp16: 1 | bf16: 0
+              | fp4: 0 | warp size: 64 | shared memory: 32768
+              | int dot: 0 | matrix cores: none
+
+--- [2] what llama.cpp enumerates as a compute device ---
+$ llama-cli --list-devices
+Available devices:
+  Vulkan0: Adreno (TM) 830 (8428 MiB, 5682 MiB free)
+
+# NOTE: this list has exactly one entry, and it is the real GPU.
+#       The system also ships lvp_icd (lavapipe = CPU software rasteriser).
+#       If ggml had picked that, "Vulkan works" would be true and
+#       "GPU is used" would be false.
+
+--- [3] layer placement and device buffer sizes ---
+run A (2026-09-30):
+0.00.257.811 I llama_prepare_model_devices: using device Vulkan0 (Adreno (TM) 830) (unknown id) - 6374 MiB free
+0.02.148.032 I load_tensors: offloaded 29/29 layers to GPU
+0.02.148.038 I load_tensors:      Vulkan0 model buffer size =  4168.09 MiB
+0.02.148.041 I load_tensors:  Vulkan_Host model buffer size =   292.36 MiB
+0.05.525.836 I llama_context: Vulkan_Host  output buffer size =     0.58 MiB
+0.05.635.418 I llama_kv_cache:    Vulkan0 KV buffer size =   448.00 MiB
+0.06.007.893 I sched_reserve:    Vulkan0 compute buffer size =   133.01 MiB
+0.06.007.901 I sched_reserve: Vulkan_Host compute buffer size =    22.02 MiB
+
+run B (2026-10-01):
+0.01.916.820 I load_tensors: offloaded 29/29 layers to GPU
+0.01.916.826 I load_tensors:      Vulkan0 model buffer size =  4168.09 MiB
+0.01.916.827 I load_tensors:  Vulkan_Host model buffer size =   292.36 MiB
+0.05.216.342 I llama_kv_cache:    Vulkan0 KV buffer size =   532.00 MiB
+0.05.573.180 I sched_reserve:    Vulkan0 compute buffer size =   134.51 MiB
+0.05.573.187 I sched_reserve: Vulkan_Host compute buffer size =    23.52 MiB
+
+# 29/29 layers on the device, 4168.09 MiB of weights in a device-local buffer
+# (identical in both runs). A CPU path does not allocate that.
+
+--- [4] the process holds the Adreno driver node open ---
+see proc-evidence.log:
+  fd_kgsl_open=1     -> /dev/kgsl-3d0 (Qualcomm GPU driver node) is in the fd table
+  maps_freedreno=3   -> libvulkan_freedreno.so is mapped
+  maps_libvulkan=9
+
+# /dev/kgsl-3d0 is crw-rw-rw-, so this is checkable without root.
+# Nothing on a CPU-only path opens it.
+
+--- [5] cross-check: CPU time collapses 33s -> 5s ---
+see cpu-seconds.txt. Not explainable by anything other than the work moving
+off the CPU.
+
+--- [6] what we could NOT measure ---
+GPU utilisation percentage. All six candidate sources are unreadable without root:
+  /sys/kernel/debug/kgsl/kgsl-3d0/gpubusy              NOT READABLE
+  /sys/kernel/debug/kgsl/kgsl-3d0/gpu_busy_percentage  NOT READABLE
+  /sys/class/kgsl/kgsl-3d0/gpubusy                     NOT READABLE
+  /proc/gpuinfo                                        NOT READABLE
+  /proc/gpufreq/gpufreq_opp_dump                       NOT READABLE
+  /sys/kernel/ged/hal/gpu_utilization                  NOT READABLE
+No dumpsys, no root, no GPU entry under /proc or /sys/class.
+We did not substitute a different number for it.

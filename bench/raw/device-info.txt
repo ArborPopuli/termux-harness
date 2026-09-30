@@ -1,0 +1,50 @@
+=== collected: 2026-10-01T00:14:42+08:00 ===
+
+--- device properties (getprop) ---
+ro.product.model             = AAK-AN00
+ro.product.brand             = HONOR
+ro.product.manufacturer      = HONOR
+ro.board.platform            = sun
+ro.soc.model                 = SM8750
+ro.soc.manufacturer          = QTI
+ro.build.version.release     = 16
+ro.build.version.sdk         = 36
+ro.hardware                  = qcom
+
+--- kernel ---
+Linux localhost 6.6.118-android15 aarch64 Android   (build hash redacted)
+--- cores ---
+8
+--- cpuinfo ---
+Hardware	: SM8750
+--- cpu features (selected) ---
+asimd i8mm bf16
+
+--- memory ---
+               total        used        free      shared  buff/cache   available
+Mem:           11238        9767         430          23        1357        1470
+Swap:          12287        2007       10280
+
+--- llama.cpp ---
+version: 0.5.0-dev (build 0, commit unknown)
+built with Clang 21.1.8 for Android aarch64
+
+--- vulkan ICDs present ---
+freedreno_icd.aarch64.json
+lvp_icd.aarch64.json
+
+--- vulkan loader ---
+libvulkan.so.1 -> libvulkan.so.1.4.364
+
+--- relevant termux packages ---
+clang/stable,now 21.1.8-3 aarch64 [installed]
+cmake/stable,now 4.4.3 aarch64 [installed]
+curl/stable,now 8.22.0 aarch64 [installed]
+git/stable,now 2.55.0 aarch64 [installed]
+glslang/stable,now 16.6.0 aarch64 [installed]
+python/stable,now 3.14.6-1 aarch64 [installed]
+shaderc/stable,now 2026.4 aarch64 [installed]
+spirv-headers/stable,now 1.4.363.0 all [installed]
+spirv-tools/stable,now 1.4.363.0 aarch64 [installed,automatic]
+vulkan-headers/stable,now 1.4.364 all [installed]
+vulkan-loader/stable,now 0.0.3 all [installed]

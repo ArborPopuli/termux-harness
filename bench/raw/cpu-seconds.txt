@@ -1,0 +1,17 @@
+# Method: run llama-cli -n 96, sample (utime+stime) from /proc/<pid>/stat once
+# per second, keep the maximum. USER_HZ = 100. This is a kernel counter, not an
+# estimate. Two independent runs are shown because single samples on this device
+# are NOT trustworthy (see docs/CORRECTIONS.md).
+
+=== run 1 — 2026-09-30 ===
+ngl=99  rc=0  wall=10s  cpu_ticks=547   cpu_seconds=5
+ngl=0   rc=0  wall=13s  cpu_ticks=3357  cpu_seconds=33
+
+=== run 2 — 2026-10-01T00:35 ===
+ngl=99  rc=0  wall=8s   cpu_ticks=483   cpu_seconds=4
+ngl=0   rc=0  wall=13s  cpu_ticks=3544  cpu_seconds=35
+
+# interpretation
+#   ngl=99 :  4–5 CPU-seconds
+#   ngl=0  : 33–35 CPU-seconds
+#   ratio  : 6.6x – 8.8x less CPU work with the model on the GPU
