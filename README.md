@@ -64,6 +64,7 @@ expect materially better numbers from the same configuration.
 | `start-llama-server.sh` | Brings up `llama-server` with an offload ladder (`99 → 30 → 0`) that degrades automatically on allocation failure |
 | `install.sh` | Idempotent install; fixes shebangs for your `$PREFIX`; wires up `~/.agent/` |
 | `bench/run-bench.sh` | Reproduces **every number in this README**, writes `bench/raw/*-<label>.txt` |
+| `bench/harness-bench/` | Scores a model on the harness's **own job**: 30 requests → commands → run against fixtures → checked. Reports pass/fail and CPU-seconds separately |
 | `tests/guards.sh` | Offline regression tests for the safety guards. No server, no model, no device memory |
 | `tests/integration.sh` | End-to-end self-test (health, completions, harness, plugins) |
 | `docs/` | Measurements, corrections, the Termux/Android gotchas that cost us hours, and how to build this lab yourself |

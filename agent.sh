@@ -53,6 +53,24 @@ COST_INTERVAL="${COST_INTERVAL:-1}"
 [ -f "$AGENT_DIR/config.sh" ] && . "$AGENT_DIR/config.sh"
 API_BASE="http://${API_HOST}:${API_PORT}"
 
+# What the server is actually serving.
+#
+# `$MODEL` is a label, and its default names a model the user may never have
+# loaded — so the line below used to print "thinking (model: qwen2.5-coder-7b)"
+# while a 4B answered. That is a claim we cannot back, in a project whose whole
+# point is that every number can be traced to what produced it. Ask the server
+# instead, and fall back to the configured label only if it does not answer.
+served_model() {
+    local id
+    id=$(curl -sf -m 3 "$API_BASE/v1/models" 2>/dev/null \
+        | python3 -c 'import json,sys
+try:
+    print(json.load(sys.stdin)["data"][0]["id"])
+except Exception:
+    pass' 2>/dev/null)
+    if [ -n "${id:-}" ]; then basename "$id"; else printf '%s' "$MODEL"; fi
+}
+
 GREEN='\033[0;32m'; YELLOW='\033[1;33m'; CYAN='\033[0;36m'; RED='\033[0;31m'; NC='\033[0m'
 
 case "$REPLY_LANG" in
@@ -232,7 +250,7 @@ main() {
     ensure_server || exit 1
 
     local user_prompt="$*"
-    echo -e "${CYAN}thinking (model: $MODEL @ $API_BASE)...${NC}"
+    echo -e "${CYAN}thinking (model: $(served_model) @ $API_BASE)...${NC}"
     local raw_response; raw_response=$(generate_response "$user_prompt")
 
     if [[ "$raw_response" == __API_ERROR__* || "$raw_response" == __PARSE_ERROR__* ]]; then
