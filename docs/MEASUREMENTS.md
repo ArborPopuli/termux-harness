@@ -125,8 +125,9 @@ There is no `dumpsys` in Termux, no root, and no GPU entry under `/proc` or
 
 ### What we measured instead
 
-Four pieces of evidence that are stronger than a utilisation reading, because
-each one is impossible if the GPU is *not* being used:
+Four things we could measure. Two of them — (b) and (d) — are impossible if the GPU
+is *not* being used, and those are the two the claim rests on. (a) is weaker than it
+looks, and (c) turned out not to discriminate at all; both say so below.
 
 **(a) Only the real GPU is enumerated as a compute device.**
 The system ships two Vulkan ICDs — `freedreno_icd` (Adreno) and `lvp_icd`
@@ -138,6 +139,11 @@ $ llama-cli --list-devices
 Available devices:
   Vulkan0: Adreno (TM) 830 (8428 MiB, 5682 MiB free)
 ```
+
+This rules out the lavapipe false success — "Vulkan works" while nothing runs on the
+GPU — but it is weaker than the other two: `--list-devices` takes no `-ngl` and
+prints the same thing either way, so it shows which device is *available*, not that
+work is being placed on it.
 
 **(b) All layers are actually placed on the device, with real device buffers.**
 
@@ -152,7 +158,11 @@ sched_reserve:     Vulkan0 compute buffer size =  134.51 MiB
 4.1 GiB of weights sitting in a device-local buffer is not something that happens
 on a CPU path.
 
-**(c) The process holds the Adreno driver device node open** (`bench/raw/proc-evidence.log`):
+Unlike (c), this changes with `-ngl`, and that is what makes it evidence: the same
+command at `-ngl 0` says `offloaded 0/29 layers`, with 4.46 GiB of weights in
+`Vulkan_Host` instead of `Vulkan0`.
+
+**(c) The Vulkan backend is initialised and the device is open** (`bench/raw/proc-evidence.log`):
 
 ```
 fd_kgsl_open=1        # /dev/kgsl-3d0 is open in llama-cli's fd table
@@ -160,15 +170,29 @@ maps_freedreno=3      # libvulkan_freedreno.so is mapped
 maps_libvulkan=9
 ```
 
-`/dev/kgsl-3d0` is the Qualcomm GPU driver node. Nothing on a CPU-only path
-opens it.
+**This one does not discriminate, and we used to claim it did.** A `-ngl 0` run
+reports the same three numbers. `-ngl 0` does not switch the Vulkan backend off — it
+only stops layers being placed on the device, and the weights then land in a
+host-side Vulkan buffer:
+
+```
+-ngl 0 :  load_tensors: offloaded 0/29 layers to GPU
+          load_tensors: Vulkan_Host model buffer size = 4460.78 MiB
+```
+
+So an open device node means *the backend was initialised*, not that the matmuls ran
+there. This is the same mistake as reading anything into `maps_lvp` — see
+[`CORRECTIONS.md`](CORRECTIONS.md) §7. The evidence that the GPU is doing the work is
+(b) and (d), both of which change with `-ngl`.
 
 **(d) CPU time collapses** — section 2 above. 33 → 5 CPU-seconds is not
 explainable by anything other than the work having moved somewhere else.
 
 Note that `maps_lvp=3` also shows up: the Vulkan loader maps *every* installed ICD
-during instance enumeration. Its presence is expected and proves nothing by
-itself — which is exactly why (a) matters.
+during instance enumeration. That is the general form of the mistake in (c) — a
+mapped library, or an open device node, records that the loader did its job, not
+where any work went. It is also why (a) asks what is *enumerated as a compute
+device* rather than what is loaded.
 
 ## Reproducing
 

@@ -124,10 +124,23 @@ echo "summarising"
   echo "--- [4] layers assigned to Vulkan0 ---"
   printf 'count: '; grep -c 'assigned to device Vulkan0' "$OUT"
   echo
-  echo "--- [5] /proc evidence while the -ngl 99 process was alive ---"
+  echo "--- [4b] the same model at -ngl 0, for contrast ---"
+  echo "    This is what makes [3] evidence rather than decoration: the lines below"
+  echo "    must differ from [3]. They are also the raw backing for the -ngl 0"
+  echo "    numbers quoted in docs/MEASUREMENTS.md section 4(b)."
+  echo "    (-ngl 0 needs no device memory, so this is cheap.)"
+  "$BIN/llama-cli" -m "$MODEL" -p "hi" -ngl 0 -n 1 -v </dev/null 2>&1 \
+    | grep -E 'offloaded [0-9]+/[0-9]+ layers|model buffer size' | head -4
+  echo
+  echo "--- [5] process state while the -ngl 99 run was alive ---"
+  echo "    NOTE: these three numbers do NOT distinguish GPU from CPU use. A -ngl 0"
+  echo "    run reports the same values, because -ngl 0 still initialises the"
+  echo "    Vulkan backend and merely declines to place layers on the device."
+  echo "    See docs/CORRECTIONS.md §7. The discriminating evidence is [3] and [4]:"
+  echo "    'offloaded N/29 layers' and the Vulkan0 buffer sizes change with -ngl."
   cat "$EV"
   echo
-  echo "--- [5b] maxima ---"
+  echo "--- [5b] maxima over the run ---"
   printf 'max_fd_kgsl_open : '; grep -o 'fd_kgsl_open=[0-9]*'  "$EV" | cut -d= -f2 | sort -rn | head -1
   printf 'max_maps_freedreno: '; grep -o 'maps_freedreno=[0-9]*' "$EV" | cut -d= -f2 | sort -rn | head -1
   printf 'max_maps_lvp     : '; grep -o 'maps_lvp=[0-9]*'      "$EV" | cut -d= -f2 | sort -rn | head -1

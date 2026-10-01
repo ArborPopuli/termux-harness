@@ -143,6 +143,70 @@ because "remember to stop the server" is not a control.
 
 ---
 
+## 7. "The open GPU device node proves the GPU is being used" — **wrong**
+
+**What we said.** `MEASUREMENTS.md` §4 offered four things we *could* measure, as
+"stronger than a utilisation reading, because each one is impossible if the GPU is
+*not* being used". The third was that the process holds the Adreno device node open
+and has the freedreno driver mapped:
+
+```
+fd_kgsl_open=1        # /dev/kgsl-3d0 is open in llama-cli's fd table
+maps_freedreno=3      # libvulkan_freedreno.so is mapped
+```
+
+with the reason given as: *"`/dev/kgsl-3d0` is the Qualcomm GPU driver node. Nothing
+on a CPU-only path opens it."*
+
+**What was true.** A `-ngl 0` run — CPU only, nothing offloaded — reports exactly the
+same numbers. Three independent runs of each configuration:
+
+| | `fd_kgsl_open` | `maps_freedreno` |
+|---|---|---|
+| `-ngl 0` | 1 | 3 |
+| `-ngl 99` | 1 | 3 |
+| `-ngl 0` | 1 | 3 |
+
+The indicator distinguishes nothing.
+
+**Why the reasoning failed.** `-ngl 0` does not switch the Vulkan backend off. It
+stops *layers being placed on the device*; llama.cpp still initialises Vulkan and
+allocates the weights in a host-side Vulkan buffer:
+
+```
+-ngl 0 :  load_tensors: offloaded 0/29 layers to GPU
+          load_tensors: Vulkan_Host model buffer size = 4460.78 MiB
+```
+
+So an open device node and a mapped driver mean *the Vulkan backend was
+initialised*. They say nothing about where the matmuls ran.
+
+**The document already contained the correct reasoning, and did not apply it here.**
+§4 dismisses `maps_lvp=3` in one sentence:
+
+> the Vulkan loader maps *every* installed ICD during instance enumeration. Its
+> presence is expected and proves nothing by itself.
+
+That sentence is true verbatim with `freedreno` or `kgsl` substituted for `lvp`. We
+wrote the rule and then broke it two paragraphs later.
+
+**The fix.** The claim that the GPU is doing the work now rests only on evidence
+that actually varies with `-ngl`:
+
+- the `load_tensors` line — `offloaded 0/29` at `-ngl 0`, `offloaded 29/29` at
+  `-ngl 99`, with `Vulkan0 model buffer size = 4168.09 MiB` in the latter
+- the CPU-time collapse in §2 — 33 → 5 CPU-seconds
+
+Both are discriminating and neither was wrong, so **the conclusion does not move**:
+the GPU is being used. What moves is that one of the four arguments for it was not
+an argument. §4(c) now says what it actually shows.
+
+Found on 2026-10-01 while hardening `bench/run-bench.sh`, by running the negative
+control the earlier work had skipped — the same `-ngl 0` baseline used everywhere
+else, applied to an indicator nobody had thought to check against it.
+
+---
+
 ## Meta
 
 The pattern across corrections 1–4 is the same, and it is not about LLMs or
