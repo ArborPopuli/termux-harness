@@ -1,0 +1,72 @@
+# harness-bench 任务集
+#
+# 每行：id <TAB> 中文请求 <TAB> 判定表达式
+#
+# 判定表达式在两个变量下求值：
+#   $OUT  = 生成的命令的 stdout（已去掉首尾空行）
+#   $LAB  = /storage/emulated/0/bench-lab
+# 表达式退出 0 即通过。
+#
+# ⚠️ 判定必须验**命令的效果**，不能验夹具本来就有的东西。
+#    这条规则是被违反过一次才写下来的：第一版判定里 "找出 jpg" 被写成
+#    "检查 jpg 存在"，而夹具里本来就有 jpg —— 那样任何命令都算通过。
+#
+# ⚠️ 请求文本里的 $LAB 会被 run-bench.sh 展开成真实路径再发给模型。
+#    第一版请求写的是"lab 里"，没给路径；模型合理地猜成
+#    /storage/emulated/0/lab，于是 30 条全灭 —— 而那是**基准的毛病，不是
+#    模型的**。这个基准量的是"中文请求 → 正确的 shell 命令"，不是"猜目录
+#    叫什么名字"。所以在场的人必须把路径说出来，就像真实用户会做的那样。
+#
+# 夹具由 setup-fixtures.sh 建立。这份文件在跑任何模型之前冻结。
+#
+# 期望值是**从夹具实测出来的**，不是估的 —— 见 setup-fixtures.sh 的注释。
+
+# ---- 1. 按名字/扩展名查找（验输出） -----------------------------------------
+t01	找出 $LAB 里所有 jpg 文件	test "$(printf '%s\n' "$OUT" | grep -c '\.jpg')" = "3"
+t02	列出 $LAB 里名字包含 report 的所有文件	test "$(printf '%s\n' "$OUT" | grep -c 'report')" = "2"
+t03	统计 $LAB 里 .log 文件的个数	test "$(printf '%s\n' "$OUT" | grep -oE '\b3\b' | head -1)" = "3"
+t04	列出 $LAB 里所有名字以 draft 开头的文件	test "$(printf '%s\n' "$OUT" | grep -c 'draft')" = "2"
+
+# ---- 2. 按时间查找 ----------------------------------------------------------
+t05	找出 $LAB 里最近 3 天修改过的 txt 文件	test "$(printf '%s\n' "$OUT" | grep -c 'recent')" = "2"
+t06	找出 $LAB 里 7 天以前修改过的文件	test "$(printf '%s\n' "$OUT" | grep -c 'ancient')" = "1"
+
+# ---- 3. 按大小查找 ----------------------------------------------------------
+t07	找出 $LAB 里大于 1MB 的文件	test "$(printf '%s\n' "$OUT" | grep -c 'big')" = "1"
+t08	列出 $LAB 里的空文件	test "$(printf '%s\n' "$OUT" | grep -cE '/(a\.jpg|b\.jpg|c\.jpg|pic\.jpeg|draft-a\.txt|draft-b\.txt|empty1|empty2)$')" = "8"
+
+# ---- 4. 内容搜索 ------------------------------------------------------------
+t09	在 $LAB 里搜索包含 TODO 的文件	test "$(printf '%s\n' "$OUT" | grep -cE '(todo1\.txt|todo2\.txt|mixed\.txt)')" = "3"
+t10	统计 $LAB 目录下（不含子目录）所有 txt 文件的总行数	test "$(printf '%s\n' "$OUT" | grep -oE '[0-9]+' | head -1)" = "21"
+t11	找出 $LAB 里包含 error 的行	test "$(printf '%s\n' "$OUT" | grep -ci error)" -ge 2
+
+# ---- 5. 统计与计数 ----------------------------------------------------------
+t12	统计 $LAB 目录下有多少个文件	test "$(printf '%s\n' "$OUT" | grep -oE '[0-9]+' | head -1)" = "26"
+t13	统计 $LAB 占用了多少磁盘空间	test -n "$(printf '%s\n' "$OUT" | grep -oE '[0-9]+')"
+t14	列出 $LAB 下每个子目录的名字	test "$(printf '%s\n' "$OUT" | grep -cE 'archive|logs|docs')" = "3"
+
+# ---- 6. 移动与复制（验文件系统变化） ----------------------------------------
+t15	把 $LAB 里的 tmp.txt 移动到 $LAB/archive 目录	test -f $LAB/archive/tmp.txt && [ ! -f $LAB/tmp.txt ]
+t16	把 $LAB 里所有 .log 文件复制到 $LAB/logs 目录	test "$(ls $LAB/logs/*.log 2>/dev/null | wc -l)" = "3"
+t17	把 $LAB/notes.txt 复制一份叫 notes.bak	test -f $LAB/notes.bak && cmp -s $LAB/notes.txt $LAB/notes.bak
+
+# ---- 7. 重命名 --------------------------------------------------------------
+t18	把 $LAB 里的 old.txt 改名成 new.txt	test -f $LAB/new.txt && [ ! -f $LAB/old.txt ]
+t19	把 $LAB 里所有 .jpeg 后缀改成 .jpg	test "$(ls $LAB/*.jpeg 2>/dev/null | wc -l)" = "0" && test "$(ls $LAB/*.jpg 2>/dev/null | wc -l)" -ge 4
+
+# ---- 8. 创建与删除 ----------------------------------------------------------
+t20	在 $LAB 下建立一个叫 results 的目录	test -d $LAB/results
+t21	删掉 $LAB 里的空文件	test "$(find $LAB -maxdepth 1 -type f -empty | wc -l)" = "0"
+t22	删掉 $LAB 下的空目录	test "$(find $LAB -mindepth 1 -type d -empty | wc -l)" = "0"
+
+# ---- 9. 文本处理 ------------------------------------------------------------
+t23	把 $LAB/data.txt 按行排序	test "$(printf '%s' "$OUT" | head -1)" = "$(sort $LAB/data.txt 2>/dev/null | head -1)"
+t24	取出 $LAB/data.txt 的前 3 行	test "$(printf '%s\n' "$OUT" | grep -c .)" = "3"
+t25	显示 $LAB/data.txt 里不重复的行	test "$(printf '%s\n' "$OUT" | grep -c .)" = "3"
+
+# ---- 10. 组合与边界 ---------------------------------------------------------
+t26	找出 $LAB 里最大的那个文件	test "$(printf '%s\n' "$OUT" | grep -c 'big')" = "1"
+t27	统计 $LAB 里每种扩展名各有多少个文件	test "$(printf '%s\n' "$OUT" | grep -cE '(jpg|txt|log)')" -ge 3
+t28	找出 $LAB 里最近修改的那个文件	test -n "$(printf '%s\n' "$OUT")"
+t29	列出 $LAB 下深度超过两层的文件	test "$(printf '%s\n' "$OUT" | grep -c 'deep')" -ge 1
+t30	找出同时包含 TODO 和 FIXME 的文件	test "$(printf '%s\n' "$OUT" | grep -c 'mixed')" = "1"

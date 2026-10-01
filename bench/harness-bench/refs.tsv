@@ -1,0 +1,43 @@
+# 参考命令 —— 每条任务一个"已知正确"的答案。
+#
+# 用途：validate-checkers.sh 会拿这些命令去跑判定器。判定器连自己人都判不过，
+# 就是判定器错了。
+#
+# 为什么需要这个：t08 / t09 / t12 三条判定器曾经是坏的，而且坏得很安静 ——
+# 它们把正确答案判成了 FAIL。没有这份参考命令，唯一的发现途径就是"看着觉得
+# 不对"，而 25/30 这个分数看起来完全正常。
+#
+# 格式：id <TAB> 参考命令（$LAB 会被展开）
+#
+# 参考命令只求"效果正确"，不追求优雅 —— 它不参与打分，只用来验证判定器。
+
+t01	find $LAB -iname '*.jpg'
+t02	find $LAB -iname '*report*'
+t03	find $LAB -name '*.log' | wc -l
+t04	find $LAB -name 'draft*'
+t05	find $LAB -iname '*.txt' -mtime -3
+t06	find $LAB -mtime +7
+t07	find $LAB -type f -size +1M
+t08	find $LAB -type f -empty
+t09	grep -rl 'TODO' $LAB
+t10	cat $LAB/*.txt | wc -l
+t11	grep -rn 'error' $LAB
+t12	find $LAB -type f | wc -l
+t13	du -sh $LAB
+t14	find $LAB -mindepth 1 -maxdepth 1 -type d
+t15	mv $LAB/tmp.txt $LAB/archive/tmp.txt
+t16	cp $LAB/*.log $LAB/logs/
+t17	cp $LAB/notes.txt $LAB/notes.bak
+t18	mv $LAB/old.txt $LAB/new.txt
+t19	cd $LAB && for f in *.jpeg; do mv "$f" "${f%.jpeg}.jpg"; done
+t20	mkdir $LAB/results
+t21	find $LAB -maxdepth 1 -type f -empty -delete
+t22	find $LAB -mindepth 1 -type d -empty -delete
+t23	sort $LAB/data.txt
+t24	head -3 $LAB/data.txt
+t25	sort -u $LAB/data.txt
+t26	find $LAB -type f -size +1M
+t27	find $LAB -type f | sed 's/.*\.//' | sort | uniq -c
+t28	ls -t $LAB | head -1
+t29	find $LAB -mindepth 3 -type f
+t30	grep -rl 'TODO' $LAB | xargs grep -l 'FIXME'

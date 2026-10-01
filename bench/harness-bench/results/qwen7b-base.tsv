@@ -1,0 +1,39 @@
+# label	qwen7b-base
+# model	/data/data/com.termux/files/home/qwen2.5-coder-7b.gguf
+# ngl	99
+# started	2026-10-01T14:26:02+08:00
+#
+id	result	wall_s	cpu_s	cmd	reply
+t01	PASS	14	0.47	find /storage/emulated/0/bench-lab -iname '*.jpg'	Part 1: 在 /storage/emulated/0/bench-lab 目录下查找所有 jpg 文件。  Part 2: [CMD]find /storage/emulated/0/bench-lab -iname '*.jpg'[
+t02	PASS	10	0.47	find /storage/emulated/0/bench-lab -iname '*report*'	Part 1: 在 /storage/emulated/0/bench-lab 目录下查找所有文件名包含 "report" 的文件。  Part 2: [CMD]find /storage/emulated/0/bench-lab -ina
+t03	PASS	10	0.45	find /storage/emulated/0/bench-lab -name "*.log" | wc -l	Part 1: 我将统计 /storage/emulated/0/bench-lab 目录下所有 .log 文件的个数。  Part 2: [CMD]find /storage/emulated/0/bench-lab -name "*.l
+t04	PASS	8	0.27	find /storage/emulated/0/bench-lab -name 'draft*'	Part 1: 在 /storage/emulated/0/bench-lab 目录下列出所有以 draft 开头的文件。  Part 2: [CMD]find /storage/emulated/0/bench-lab -name 'dr
+t05	PASS	9	0.15	find /storage/emulated/0/bench-lab -iname '*.txt' -mtime -3	Part 1: 我将帮助你查找 /storage/emulated/0/bench-lab 目录下最近 3 天内修改过的 .txt 文件。  Part 2: [CMD]find /storage/emulated/0/bench-lab -
+t06	PASS	7	0.12	find /storage/emulated/0/bench-lab -mtime +7	Part 1: 在 /storage/emulated/0/bench-lab 目录下查找 7 天以前修改过的文件。  Part 2: [CMD]find /storage/emulated/0/bench-lab -mtime +7[/C
+t07	PASS	8	0.12	find /storage/emulated/0/bench-lab -type f -size +1M	Part 1: 在 /storage/emulated/0/bench-lab 目录下查找大于 1MB 的文件。  Part 2: [CMD]find /storage/emulated/0/bench-lab -type f -size 
+t08	PASS	7	0.17	find /storage/emulated/0/bench-lab -type f -empty	Part 1: 我将列出 /storage/emulated/0/bench-lab 目录下的所有空文件。  Part 2: [CMD]find /storage/emulated/0/bench-lab -type f -empty[/C
+t09	PASS	7	0.13	grep -r "TODO" /storage/emulated/0/bench-lab	Part 1: 在 /storage/emulated/0/bench-lab 目录下搜索包含 "TODO" 的文件。  Part 2: [CMD]grep -r "TODO" /storage/emulated/0/bench-lab[/
+t10	FAIL	12	0.34	find /storage/emulated/0/bench-lab -maxdepth 1 -iname '*.txt' -exec wc -l {} + | awk '{total += $1} END {print total}'	Part 1: 我将统计 /storage/emulated/0/bench-lab 目录下（不含子目录）所有 txt 文件的总行数。  Part 2: [CMD]find /storage/emulated/0/bench-lab -ma
+t11	PASS	10	0.17	grep -r "error" /storage/emulated/0/bench-lab	Part 1: 我将搜索 /storage/emulated/0/bench-lab 目录下所有文件，并找出包含 "error" 的行。  Part 2: [CMD]grep -r "error" /storage/emulated/0/b
+t12	PASS	9	0.14	find /storage/emulated/0/bench-lab -type f | wc -l	Part 1: 我将统计 /storage/emulated/0/bench-lab 目录下的文件数量。  Part 2: [CMD]find /storage/emulated/0/bench-lab -type f | wc -l[/C
+t13	PASS	8	0.15	du -sh /storage/emulated/0/bench-lab	Part 1: 我将统计 /storage/emulated/0/bench-lab 目录占用的磁盘空间。  Part 2: [CMD]du -sh /storage/emulated/0/bench-lab[/CMD]
+t14	PASS	9	0.15	ls -d /storage/emulated/0/bench-lab/*/	Part 1: 我将列出 /storage/emulated/0/bench-lab 目录下的所有子目录名称。  Part 2: [CMD]ls -d /storage/emulated/0/bench-lab/*/[/CMD]
+t15	PASS	13	0.20	mv /storage/emulated/0/bench-lab/tmp.txt /storage/emulated/0/bench-lab/archive	Part 1: 将 /storage/emulated/0/bench-lab 目录下的 tmp.txt 文件移动到 /storage/emulated/0/bench-lab/archive 目录。  Part 2: [CMD]mv /s
+t16	PASS	13	0.21	cp /storage/emulated/0/bench-lab/*.log /storage/emulated/0/bench-lab/logs	Part 1: 将 /storage/emulated/0/bench-lab 目录下的所有 .log 文件复制到 /storage/emulated/0/bench-lab/logs 目录。  Part 2: [CMD]cp /stora
+t17	PASS	11	0.28	cp /storage/emulated/0/bench-lab/notes.txt /storage/emulated/0/bench-lab/notes.bak	Part 1: 将 /storage/emulated/0/bench-lab/notes.txt 文件复制一份并命名为 notes.bak。  Part 2: [CMD]cp /storage/emulated/0/bench-lab/n
+t18	PASS	11	0.43	mv /storage/emulated/0/bench-lab/old.txt /storage/emulated/0/bench-lab/new.txt	Part 1: 将 /storage/emulated/0/bench-lab 目录下的 old.txt 文件重命名为 new.txt。  Part 2: [CMD]mv /storage/emulated/0/bench-lab/old.
+t19	PASS	13	0.44	find /storage/emulated/0/bench-lab -iname '*.jpeg' -exec sh -c 'mv "$0" "${0%.jpeg}.jpg"' {} \;	Part 1: 将 /storage/emulated/0/bench-lab 目录下所有 .jpeg 文件的后缀名改为 .jpg。  Part 2: [CMD]find /storage/emulated/0/bench-lab -ina
+t20	PASS	8	0.15	mkdir /storage/emulated/0/bench-lab/results	Part 1: 在指定路径下创建一个名为 "results" 的目录。  Part 2: [CMD]mkdir /storage/emulated/0/bench-lab/results[/CMD]
+t21	PASS	9	0.33	find /storage/emulated/0/bench-lab -type f -empty -delete	Part 1: 我将删除 /storage/emulated/0/bench-lab 目录中的所有空文件。  Part 2: [CMD]find /storage/emulated/0/bench-lab -type f -empty -d
+t22	PASS	9	0.36	find /storage/emulated/0/bench-lab -type d -empty -delete	Part 1: 我将删除 /storage/emulated/0/bench-lab 目录下的所有空目录。  Part 2: [CMD]find /storage/emulated/0/bench-lab -type d -empty -d
+t23	PASS	8	0.30	sort /storage/emulated/0/bench-lab/data.txt	Part 1: 将 /storage/emulated/0/bench-lab/data.txt 文件按行排序。  Part 2: [CMD]sort /storage/emulated/0/bench-lab/data.txt[/CMD]
+t24	PASS	10	0.41	head -n 3 /storage/emulated/0/bench-lab/data.txt	Part 1: 我将使用 `head` 命令来提取 `/storage/emulated/0/bench-lab/data.txt` 文件的前 3 行。  Part 2: [CMD]head -n 3 /storage/emulated/0
+t25	PASS	9	0.36	sort /storage/emulated/0/bench-lab/data.txt | uniq	Part 1: 我将显示位于 /storage/emulated/0/bench-lab/data.txt 文件中不重复的行。  Part 2: [CMD]sort /storage/emulated/0/bench-lab/data.tx
+t26	PASS	11	0.47	find /storage/emulated/0/bench-lab -type f -exec ls -lh {} + | sort -hr | head -n 1	Part 1: 我将帮助你找出 /storage/emulated/0/bench-lab 目录下最大的文件。  Part 2: [CMD]find /storage/emulated/0/bench-lab -type f -exec l
+t27	PASS	12	0.52	find /storage/emulated/0/bench-lab -type f | awk -F. '{print $NF}' | sort | uniq -c | sort -nr	Part 1: 我将统计 /storage/emulated/0/bench-lab 目录下每种文件扩展名的文件数量。  Part 2: [CMD]find /storage/emulated/0/bench-lab -type f | a
+t28	PASS	12	0.46	find /storage/emulated/0/bench-lab -type f -printf "%T+ %p\n" | sort | tail -n 1	Part 1: 我将帮助你找出 /storage/emulated/0/bench-lab 目录下最近修改的文件。  Part 2: [CMD]find /storage/emulated/0/bench-lab -type f -prin
+t29	PASS	9	0.38	find /storage/emulated/0/bench-lab -mindepth 3	Part 1: 我将列出位于 /storage/emulated/0/bench-lab 目录下深度超过两层的文件。  Part 2: [CMD]find /storage/emulated/0/bench-lab -mindepth 3[
+t30	PASS	13	0.52	find /storage/emulated/0/ -type f \( -exec grep -l "TODO" {} + \) -exec grep -l "FIXME" {} + | sort -u	Part 1: 我将帮助你查找同时包含 "TODO" 和 "FIXME" 的文件。搜索将从默认的存储根目录开始。  Part 2: [CMD]find /storage/emulated/0/ -type f \( -exec grep -
+#
+# passed	29/30
+# finished	2026-10-01T14:33:21+08:00
