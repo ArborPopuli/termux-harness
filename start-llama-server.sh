@@ -44,7 +44,20 @@ server_pid() {
     return 1
 }
 
-is_up() { curl -sf -m 3 "$BASE_URL/health" >/dev/null 2>&1; }
+# llama.cpp's llama-server answers /health with {"status":"ok"} once the model is
+# loaded, and 503 while it is still loading. Checking for HTTP 200 alone is not
+# enough: any other server on this port gets mistaken for ours, which makes
+# --status lie, stops the launcher from ever starting, and makes run-bench.sh
+# refuse to run. That is not hypothetical — an unrelated MLX model server on
+# 127.0.0.1:8080 answers {"status":"healthy"} and produced exactly that.
+is_up() {
+    local body
+    body=$(curl -sf -m 3 "$BASE_URL/health" 2>/dev/null) || return 1
+    case "$(printf '%s' "$body" | tr -d '[:space:]')" in
+        *'"status":"ok"'*) return 0 ;;
+        *) return 1 ;;
+    esac
+}
 
 do_status() {
     if is_up; then
