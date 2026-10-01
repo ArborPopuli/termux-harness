@@ -6,7 +6,12 @@
 #
 # Usage:
 #   bash agent.sh "find jpgs from the last 3 days in Download"
+#   bash agent.sh --device                show what the phone is doing
 #   bash agent.sh /<plugin> [args]        run a plugin
+#
+# A confirmed command runs under a wall-clock timeout, in its own process group
+# so nothing it starts outlives it, holding a wake lock so Android does not reap
+# it, and afterwards reports what it cost the device. See device.sh.
 #
 # Config: ~/.agent/config.sh (optional, see config.example.sh)
 
@@ -16,6 +21,12 @@ AGENT_DIR="${AGENT_DIR:-$HOME/.agent}"
 PLUGIN_DIR="$AGENT_DIR/plugins"
 HISTORY_FILE="$AGENT_DIR/history.txt"
 LAUNCHER="${LAUNCHER:-$HOME/termux-harness/start-llama-server.sh}"
+
+# Optional: reading what the phone is doing while a command runs. Absent is fine —
+# every use below is guarded — but without it the harness runs commands on
+# someone's phone and reports nothing about what they cost.
+AGENT_HOME="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+[ -f "$AGENT_HOME/device.sh" ] && . "$AGENT_HOME/device.sh"
 
 # ---- defaults (override in ~/.agent/config.sh) ------------------------------
 MODEL="${MODEL:-qwen2.5-coder-7b}"
@@ -27,6 +38,16 @@ HISTORY_TURNS="${HISTORY_TURNS:-6}"
 # Language the model is told to write its explanation in. The command half is
 # always shell, i.e. English. Set REPLY_LANG=en in config.sh for English replies.
 REPLY_LANG="${REPLY_LANG:-zh}"
+# Wall-clock limit for one command, in seconds. The system prompt asks the model
+# not to emit commands that wait for input; this is what happens when it does
+# anyway. 0 disables.
+CMD_TIMEOUT="${CMD_TIMEOUT:-120}"
+# Hold a wake lock while a command runs, so Android does not reap it when the
+# screen goes off (docs/TERMUX-GOTCHAS.md §4 — it looks exactly like an OOM kill).
+WAKELOCK="${WAKELOCK:-1}"
+# Print what the command cost the device. Needs device.sh.
+REPORT_COST="${REPORT_COST:-1}"
+COST_INTERVAL="${COST_INTERVAL:-1}"
 # -----------------------------------------------------------------------------
 
 [ -f "$AGENT_DIR/config.sh" ] && . "$AGENT_DIR/config.sh"
@@ -148,8 +169,64 @@ run_plugin() {
     fi
 }
 
+# Run a command with a wall-clock limit, in its own process group.
+#
+# Two mechanisms, because the obvious one is not enough:
+#
+#   * `timeout` signals the child process. Anything the command backgrounds
+#     survives it — `find / &`, or a pipeline that spawns a helper. Measured on
+#     the device: after `timeout 1 bash -c "sleep 40 & sleep 40"`, both sleeps
+#     were still alive. The timeout reported success at killing; the process
+#     table disagreed.
+#   * `setsid` puts the command in its own session, so a signal to the process
+#     group reaches the whole tree. Verified: 4 sleeps -> 0.
+#
+# So: setsid, and a watchdog that kills the group. Returns 124 on timeout, the
+# command's own status otherwise.
+_run_limited() {  # _run_limited <seconds> <outfile> <command>
+    local limit="$1" out="$2" cmd="$3" pid waited=0
+
+    if command -v setsid >/dev/null 2>&1 && [ "${limit:-0}" -gt 0 ] 2>/dev/null; then
+        setsid bash -c "$cmd" </dev/null >"$out" 2>&1 &
+        pid=$!
+        while kill -0 "$pid" 2>/dev/null; do
+            [ "$waited" -ge "$limit" ] && break
+            sleep 1
+            waited=$((waited + 1))
+        done
+        if kill -0 "$pid" 2>/dev/null; then
+            kill -TERM -"$pid" 2>/dev/null || kill -TERM "$pid" 2>/dev/null
+            sleep 2
+            kill -KILL -"$pid" 2>/dev/null || kill -KILL "$pid" 2>/dev/null
+            wait "$pid" 2>/dev/null
+            return 124
+        fi
+        wait "$pid"
+        return $?
+    fi
+
+    # No setsid, or the limit is switched off: run it plainly.
+    bash -c "$cmd" </dev/null >"$out" 2>&1
+}
+
 main() {
     if [[ $# -eq 0 ]]; then echo -e "usage: $0 \"what you want\""; exit 1; fi
+
+    case "${1:-}" in
+        # What the phone is doing right now. No model, no server, no memory —
+        # just a read of a few world-readable files.
+        --device)
+            if command -v device_state_line >/dev/null 2>&1; then
+                echo "  $(device_state_line)"
+                exit 0
+            fi
+            echo "device.sh not found next to agent.sh" >&2
+            exit 1 ;;
+        --help|-h)
+            sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'
+            exit 0 ;;
+    esac
+
     if [[ "$1" == /* ]]; then run_plugin "${1:1}" "${@:2}"; exit 0; fi
 
     ensure_server || exit 1
@@ -208,16 +285,50 @@ main() {
     read -p "run this command? (y/n): " -n 1 -r
     echo
     if [[ $REPLY =~ ^[Yy]$ ]]; then
+        local output rc start_t wall locked=0 sp="" sf="" outf
+
+        # Keep Android from reaping us mid-command. The lock ships with the
+        # Termux app rather than with termux-api, so it is usually available even
+        # when nothing else is.
+        if [ "${WAKELOCK:-1}" = "1" ] && command -v termux-wake-lock >/dev/null 2>&1; then
+            termux-wake-lock >/dev/null 2>&1 && locked=1
+        fi
+
+        # Sample alongside the command rather than after it: the cost is in the
+        # peaks, and a peak that only exists mid-run is gone by the time it ends.
+        if [ "${REPORT_COST:-1}" = "1" ] && command -v device_sampler_start >/dev/null 2>&1; then
+            sf="$AGENT_DIR/.cost.$$"
+            sp=$(device_sampler_start "$sf" "${COST_INTERVAL:-1}")
+        fi
+
         echo -e "${CYAN}running: $cmd${NC}"
-        local output rc
-        output=$(eval "$cmd" < /dev/null 2>&1); rc=$?
+        outf="$AGENT_DIR/.out.$$"
+        start_t=$(date +%s)
+        _run_limited "${CMD_TIMEOUT:-120}" "$outf" "$cmd"
+        rc=$?
+        wall=$(( $(date +%s) - start_t ))
+        output=$(cat "$outf" 2>/dev/null)
+        rm -f "$outf"
+
+        [ -n "$sp" ] && device_sampler_stop "$sp"
+        [ "$locked" = 1 ] && termux-wake-unlock >/dev/null 2>&1
+
+        if [ "$rc" = 124 ]; then
+            echo -e "${RED}timed out after ${CMD_TIMEOUT}s; killed, along with anything it started.${NC}"
+        fi
         if [[ -z "$output" ]]; then
             echo -e "${YELLOW}the command finished but produced no output.${NC}"
         else
             echo -e "${GREEN}output:${NC}"
             echo "$output"
         fi
-        [[ $rc -ne 0 ]] && echo -e "${YELLOW}exit status: $rc${NC}"
+        [[ $rc -ne 0 ]] && [ "$rc" != 124 ] && echo -e "${YELLOW}exit status: $rc${NC}"
+
+        if [ -n "$sf" ]; then
+            echo -e "${GREEN}----------------- device -----------------${NC}"
+            echo -e "  $(device_cost_summary "$sf" "$wall")"
+            rm -f "$sf"
+        fi
         # The history carries all three parts, because each one answers a
         # different follow-up: the intent ("I was listing .py files"), the command
         # ("what did I run"), and the output + exit status ("what came back, and

@@ -122,6 +122,58 @@ for f in agent.sh start-llama-server.sh; do
 done
 
 echo
+echo "########## 8. a command that hangs cannot hang the harness ##########"
+# The system prompt asks the model not to emit commands that wait for input. That
+# is a request, not a control — `tail -f`, `top`, or an hour-long `find /` would
+# otherwise block forever with no way out but Ctrl-C. _run_limited is the control.
+#
+# Read the real function out of agent.sh rather than testing a copy, so this
+# cannot pass while the shipped code is broken.
+eval "$(sed -n '/^_run_limited()/,/^}/p' "$HERE/agent.sh")"
+if ! command -v _run_limited >/dev/null 2>&1; then
+    bad "could not extract _run_limited from agent.sh"
+elif ! command -v setsid >/dev/null 2>&1; then
+    # macOS has no setsid, so _run_limited takes its non-isolating fallback and
+    # the timeout cannot work there at all. These checks only mean something on
+    # the target, which is where they are meant to run.
+    printf '  --    no setsid on this host; run this section on the device\n'
+else
+    ROUT="$HOME/.guards-limited.$$"
+
+    _run_limited 3 "$ROUT" "sleep 30" >/dev/null 2>&1
+    [ $? -eq 124 ] && ok "an overrunning command is stopped (exit 124)" \
+                   || bad "an overrunning command was not stopped"
+
+    _run_limited 10 "$ROUT" "echo hello" >/dev/null 2>&1
+    if [ $? -eq 0 ] && [ "$(cat "$ROUT" 2>/dev/null)" = "hello" ]; then
+        ok "a normal command runs and its output is captured"
+    else
+        bad "a normal command did not run correctly"
+    fi
+
+    _run_limited 10 "$ROUT" "exit 42" >/dev/null 2>&1
+    [ $? -eq 42 ] && ok "a failing command's own exit status is preserved" \
+                  || bad "the command's exit status was not preserved"
+
+    # The one that actually matters, and the one `timeout` alone gets wrong.
+    # Measured on the device: plain `timeout 1 bash -c "sleep 40 & sleep 40"`
+    # left both sleeps alive and reported success at killing. A marker file is
+    # used rather than counting sleep processes, because the test's own sleeps
+    # would be counted too.
+    MARK="$HOME/.guards-orphan.$$"
+    rm -f "$MARK"
+    _run_limited 2 "$ROUT" "bash -c 'sleep 6; touch $MARK' & sleep 30" >/dev/null 2>&1
+    sleep 8
+    if [ -f "$MARK" ]; then
+        bad "a process the command backgrounded survived the timeout"
+        rm -f "$MARK"
+    else
+        ok "nothing the command started outlives the timeout"
+    fi
+    rm -f "$ROUT"
+fi
+
+echo
 echo "=================================================="
 printf 'passed %d, failed %d\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ] || exit 1

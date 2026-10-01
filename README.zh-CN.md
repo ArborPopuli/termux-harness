@@ -3,7 +3,8 @@
 **一份 Android 上 llama.cpp Vulkan GPU 卸载的实测报告 —— 外加一个即插即用的 Termux 本地 Agent harness。**
 
 [English](README.md) · [实测数据](docs/MEASUREMENTS.md) ·
-[更正登记](docs/CORRECTIONS.md) · [Termux 踩坑](docs/TERMUX-GOTCHAS.md)
+[更正登记](docs/CORRECTIONS.md) · [Termux 踩坑](docs/TERMUX-GOTCHAS.md) ·
+[把手机当实验室](docs/PHONE-AS-A-LAB.md)
 
 ---
 
@@ -52,9 +53,11 @@ Adreno 的矩阵/张量单元和整数点积指令,ggml 因此拿不到 cooperat
 | | |
 |---|---|
 | `agent.sh` | 轻量 Agent 循环:自然语言 → `[CMD]…[/CMD]` → 人工确认 → 执行 |
+| `device.sh` | 读取手机状态(温度、CPU 频率),全部来自**无需 root** 的世界可读文件 |
 | `start-llama-server.sh` | 拉起 `llama-server`,带 `99 → 30 → 0` 的卸载阶梯,分配失败自动降级 |
 | `install.sh` | 幂等安装;按你的 `$PREFIX` 修正 shebang;建好 `~/.agent/` |
 | `bench/run-bench.sh` | 复现本 README 里**每一个数字**,输出到 `bench/raw/*-<label>.txt` |
+| `tests/guards.sh` | 安全护栏的**离线**回归测试:不需要服务器、模型或显存 |
 | `tests/integration.sh` | 端到端自测(健康检查/补全/harness/插件) |
 | `docs/` | 实测数据、更正登记、以及那些吃掉我们数小时的 Termux/Android 坑 |
 
