@@ -26,6 +26,27 @@ HISTORY_TURNS="6"
 # the path was never shown. Truncated so the history still fits the context.
 HISTORY_OUTPUT_CHARS="600"
 
+# ---- running commands -------------------------------------------------------
+# Wall-clock limit for one command, in seconds. The system prompt asks the model
+# not to emit commands that wait for input; this is what happens when it does it
+# anyway — `tail -f`, `top`, or a `find /` that would run for an hour. On timeout
+# the whole process group is killed, so nothing the command started is left
+# running on the phone. Set to 0 to disable (not recommended).
+CMD_TIMEOUT="120"
+
+# Hold a wake lock while a command runs. Without it, Android reaps Termux when
+# the screen goes off and it looks exactly like an out-of-memory kill — see
+# docs/TERMUX-GOTCHAS.md §4. The lock ships with the Termux app, not the
+# termux-api package, so this usually works even on a bare install. Set to 0 if
+# you would rather not hold one.
+WAKELOCK="1"
+
+# Report what each command cost the device: peak CPU temperature and where the
+# performance core's frequency went while it ran. Needs device.sh next to
+# agent.sh, and does nothing without it.
+REPORT_COST="1"
+COST_INTERVAL="1"
+
 # ---- llama-server launcher (used by start-llama-server.sh) -----------------
 # GPU offload ladder: try full offload first, degrade automatically on failure.
 #   -ngl 99 → all 29 blocks on the Adreno (needs ~4.2 GiB of shared memory)

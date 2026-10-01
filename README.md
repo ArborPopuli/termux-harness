@@ -4,7 +4,8 @@
 drop-in local agent harness for Termux.**
 
 [中文说明](README.zh-CN.md) · [Measurements](docs/MEASUREMENTS.md) ·
-[Corrections](docs/CORRECTIONS.md) · [Termux gotchas](docs/TERMUX-GOTCHAS.md)
+[Corrections](docs/CORRECTIONS.md) · [Termux gotchas](docs/TERMUX-GOTCHAS.md) ·
+[Phone as a lab](docs/PHONE-AS-A-LAB.md)
 
 ---
 
@@ -59,14 +60,42 @@ expect materially better numbers from the same configuration.
 | | |
 |---|---|
 | `agent.sh` | A small agent loop: natural language → `[CMD]…[/CMD]` → confirm → run |
+| `device.sh` | Reads what the phone is doing — temperature, CPU frequency — from world-readable files. No root, no `termux-api` |
 | `start-llama-server.sh` | Brings up `llama-server` with an offload ladder (`99 → 30 → 0`) that degrades automatically on allocation failure |
 | `install.sh` | Idempotent install; fixes shebangs for your `$PREFIX`; wires up `~/.agent/` |
 | `bench/run-bench.sh` | Reproduces **every number in this README**, writes `bench/raw/*-<label>.txt` |
+| `tests/guards.sh` | Offline regression tests for the safety guards. No server, no model, no device memory |
 | `tests/integration.sh` | End-to-end self-test (health, completions, harness, plugins) |
-| `docs/` | Measurements, corrections, and the Termux/Android gotchas that cost us hours |
+| `docs/` | Measurements, corrections, the Termux/Android gotchas that cost us hours, and how to build this lab yourself |
 
 No Ollama. No `jq` (not installed on the target — JSON is handled with `python3`).
 Only `curl`, `python3`, `bash`, `git`.
+
+### What a confirmed command actually does
+
+Four things, none of which the obvious implementation gets right:
+
+- **It cannot hang.** The system prompt asks the model not to emit commands that
+  wait for input. That is a request, not a control — `tail -f`, `top`, or an
+  hour-long `find /` would otherwise block forever. Commands run under a
+  wall-clock limit, and on timeout the **whole process group** is killed.
+  Plain `timeout` is not enough: measured on the device, it left two backgrounded
+  processes alive and reported success at killing them.
+- **Nothing it starts outlives it.** Same mechanism — `setsid`, then signal the
+  group.
+- **It survives the screen going off.** Android reaps Termux when the screen
+  sleeps, which is `docs/TERMUX-GOTCHAS.md` §4 and looks exactly like an OOM
+  kill. A wake lock is held for the duration.
+- **It tells you what it cost.** Peak CPU temperature, and where the performance
+  core's frequency went while it ran:
+
+  ```
+  ----------------- device -----------------
+    wall 6s | peak cpu 60.6°C | prime 1017–1958 MHz (topped at 45% of max)
+  ```
+
+  That is the argument of this whole repository made visible on every command:
+  on a phone the scarce resource is thermal headroom, not FLOPs.
 
 ---
 
@@ -103,6 +132,9 @@ bash ~/termux-harness/start-llama-server.sh
 
 # ask for a command
 bash ~/termux-harness/agent.sh "find jpgs from the last 3 days in Download"
+
+# what the phone is doing right now — no model, no server, no memory
+bash ~/termux-harness/agent.sh --device
 ```
 
 Manage the server:
@@ -137,7 +169,7 @@ it doesn't have to be yours.
 
 ---
 
-## Two things worth reading even if you skip the code
+## Three things worth reading even if you skip the code
 
 **[docs/CORRECTIONS.md](docs/CORRECTIONS.md)** — claims we made confidently and
 got wrong, including one where a single unvalidated sample told us "GPU is 10×
@@ -148,6 +180,11 @@ useful than the fix.
 no `/bin/bash`, `/tmp` is `noexec`, `glslc` vs `glslang`, battery optimisation
 killing your background jobs, two Vulkan ICDs where one is a CPU rasteriser, and
 the `pkill` pattern that killed our own SSH session.
+
+**[docs/PHONE-AS-A-LAB.md](docs/PHONE-AS-A-LAB.md)** — how to turn a spare Android
+phone into a headless Linux box you can drive over SSH: keys, the battery setting
+that decides whether long jobs survive, which `/proc` and `/sys` paths are
+readable without root, and the two ways a file transfer silently misleads you.
 
 ---
 
