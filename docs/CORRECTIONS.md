@@ -207,6 +207,55 @@ else, applied to an indicator nobody had thought to check against it.
 
 ---
 
+## 8. "The CPU-seconds column measured what the model costs the phone" — **it measured nothing**
+
+**What we said.** `bench/harness-bench/run-bench.sh` prints a `cpu_s` column, reading
+the server process's `utime+stime` from `/proc/<pid>/stat`. Every row of the first full
+run said `0.00`.
+
+**What was true.** The column had never been read. The script located the server with
+`pgrep -x llama-server`, which **returns nothing on this device** while the process is
+plainly running. The PID came back empty, the `/proc` read failed into a fallback that
+echoed `0`, and the column filled with zeros. Nothing errored.
+
+**Why the reasoning failed.** A column of zeros is not obviously wrong. It reads as
+"the CPU did almost nothing", which is precisely what full GPU offload is supposed to
+produce — so the number agreed with the hypothesis. That makes it the most dangerous
+kind of wrong: **a broken instrument confirming what you already expected.** §7 was the
+same shape, an indicator that read identically on both sides of the thing it was meant
+to detect; this one is worse, because zero is a plausible value and not an absurd one.
+
+**The fix.** Capture the PID where it is free and unambiguous:
+
+```sh
+nohup "$BIN/llama-server" ... &
+SPID=$!          # not `pgrep -x llama-server`
+```
+
+For the `RUNNING=1` path, where the bench did not start the server, it reads the
+pidfile and falls back to scanning `/proc/*/comm` — matching `comm` and not `cmdline`,
+because a `cmdline` pattern also matches the scanning script's own command line (§5).
+
+**How it was caught: by timestamp, and nothing else.** The affected run started at
+14:08:32; the next run, after the fix, at 14:26:02. Eighteen minutes separate a column
+of zeros from a column of real numbers, and **nothing inside the file says which is
+which** — the header records label, model, `ngl` and start time, but a file from the
+broken run is shaped exactly like a valid one.
+
+This one had already been diagnosed and fixed in the script once. What this entry adds
+is the record: the fix had been written into a code comment and never into this file,
+so the published docs still described the broken behaviour and the next person would
+have hit it again.
+
+> The same file on the development device also holds a Nanbeige run in which **two**
+> independent instrument faults stack: `cpu_s` is `0.00` on every row (this bug), *and*
+> every task scores `noCMD` because the bench does not disable thinking for reasoning
+> models, so the token budget goes into the reasoning block and `content` returns empty.
+> Neither number describes the model. It is kept as evidence and deliberately not
+> published.
+
+---
+
 ## Meta
 
 The pattern across corrections 1–4 is the same, and it is not about LLMs or
