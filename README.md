@@ -19,8 +19,12 @@ llama.cpp's Vulkan backend, on a phone, under Termux. Then we measured it proper
 | token generation (tg32) | 9.86 ± 1.07 t/s | **9.31 ± 0.12 t/s** | **−6%** |
 | **CPU time, 96 tokens** | **33 CPU-s** | **5 CPU-s** | **6.6× less** |
 
-`llama-bench -r 3`, replicated across two independent runs
-([raw output](bench/raw/)).
+`llama-bench -r 3`, run three times ([raw output](bench/raw/)). The numbers in the
+table above are **run 1**; across all three, GPU prompt processing lands at
+**45.74 – 45.77 t/s — a 0.03 t/s spread** — while the GPU generation penalty moves
+between **6% and 15%** and the CPU-time ratio ranges **6.6× to 8.8×**. The
+*direction* is the same in every run. The individual figures are not, so read the
+ranges from [MEASUREMENTS.md](docs/MEASUREMENTS.md) before quoting one.
 
 **Token generation gets slower on the GPU.** Prompt processing gets faster.
 Neither is the point.
@@ -126,7 +130,8 @@ it doesn't have to be yours.
   `/storage/emulated/0/`, is full of them. Set `ALLOW_NON_ASCII=1` in
   `~/.agent/config.sh` if that is your situation.)
 - **Not a new inference engine.** It's llama.cpp, wired up for a phone.
-- **Not benchmark-grade science.** n = 2 runs, uncontrolled thermal state, and a
+- **Not benchmark-grade science.** n = 3 runs, two of them an hour apart in the
+  same session rather than on separate days, uncontrolled thermal state, and a
   device whose load average sat at ~21 from processes we can't see. See the
   caveats at the end of [MEASUREMENTS.md](docs/MEASUREMENTS.md).
 

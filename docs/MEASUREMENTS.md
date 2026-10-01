@@ -22,10 +22,11 @@ directory, it doesn't belong on this page.
 
 ## 1. Throughput — `llama-bench -r 3`
 
-The same command run twice, on two different days, in independent sessions.
-Both runs are shown because the spread between them is itself informative.
+The same command, in three independent sessions. All three are shown because the
+spread between them is itself informative — and because two of the four numbers
+here do not replicate tightly.
 
-**Run 1** (`bench/raw/llama-bench-run1.txt`)
+**Run 1** (`bench/raw/llama-bench-run1.txt`, 2026-09-30)
 
 | ngl | test | t/s |
 |---|---|---|
@@ -34,7 +35,7 @@ Both runs are shown because the spread between them is itself informative.
 | 99 | pp64 | **45.76 ± 0.02** |
 | 99 | tg32 | **9.31 ± 0.12** |
 
-**Run 2** (`bench/raw/llama-bench-run2.txt`)
+**Run 2** (`bench/raw/llama-bench-run2.txt`, 2026-10-01T00:15)
 
 | ngl | test | t/s |
 |---|---|---|
@@ -43,22 +44,44 @@ Both runs are shown because the spread between them is itself informative.
 | 99 | pp64 | **45.77 ± 0.02** |
 | 99 | tg32 | **10.46 ± 0.08** |
 
+**Run 3** (`bench/raw/llama-bench-run3.txt`, 2026-10-01T01:21, about an hour after run 2)
+
+| ngl | test | t/s |
+|---|---|---|
+| 0 | pp64 | 37.40 ± 0.60 |
+| 0 | tg32 | 12.26 ± 0.74 |
+| 99 | pp64 | **45.74 ± 0.05** |
+| 99 | tg32 | **10.45 ± 0.02** |
+
 ### What replicates, and what doesn't
 
-| quantity | run 1 | run 2 | verdict |
+| quantity | run 1 | run 2 | run 3 | verdict |
+|---|---|---|---|---|
+| GPU pp64 | 45.76 ± 0.02 | 45.77 ± 0.02 | 45.74 ± 0.05 | **0.03 t/s across three runs** |
+| CPU pp64 | 37.10 ± 0.48 | 36.34 ± 0.70 | 37.40 ± 0.60 | reproduces (~3%) |
+| GPU tg32 | 9.31 ± 0.12 | 10.46 ± 0.08 | 10.45 ± 0.02 | varies ~12% |
+| CPU tg32 | 9.86 ± 1.07 | 12.00 ± 0.79 | 12.26 ± 0.74 | **varies ~24%** |
+
+The GPU prompt-processing number is the most stable measurement on this device.
+Three independent runs span **45.74 – 45.77 t/s**, a total spread of **0.03**,
+against a per-run standard deviation of ±0.02–0.05. Run 3 was taken about an hour
+after run 2, on the same device in the same state; that it lands within 0.03 t/s of
+a run from the previous day is the useful part. The +22–26% gap over CPU prompt
+processing is therefore unambiguous.
+
+Token generation replicates in *direction* but not in *magnitude*:
+
+| | run 1 | run 2 | run 3 |
 |---|---|---|---|
-| GPU pp64 | 45.76 ± 0.02 | 45.77 ± 0.02 | **reproduces to 2 decimal places** |
-| CPU pp64 | 37.10 ± 0.48 | 36.34 ± 0.70 | reproduces (~2%) |
-| GPU tg32 | 9.31 ± 0.12 | 10.46 ± 0.08 | varies ~12% |
-| CPU tg32 | 9.86 ± 1.07 | 12.00 ± 0.79 | **varies ~22%** |
+| GPU tg32 vs CPU tg32 | **−6%** | **−13%** | **−15%** |
 
-The GPU prompt-processing number is the most stable measurement on this device —
-its standard deviation is **±0.02 t/s**, small enough that the +23–26% gap over
-CPU prompt processing is unambiguous.
+All three agree that **GPU token generation is not faster than CPU**. But the
+figure "−6%" that the README's summary table carries is run 1 specifically, and
+run 1 has the lowest CPU tg32 of the three (9.86, against 12.00 and 12.26). Run 3
+is also a same-session repeat of run 2, so it is not an independent confirmation of
+run 2's 12.00 in the way run 1 is.
 
-Token generation does not replicate as tightly, but the *direction* is consistent
-in both runs: **GPU token generation is not faster than CPU** (9.31 < 9.86 and
-10.46 < 12.00).
+Quote the range, or quote the direction. Not the single figure.
 
 > ⚠️ If you take one thing from this page: **do not quote a single `llama-cli`
 > run from this device.** We did exactly that and got a figure that was wrong by
@@ -72,9 +95,12 @@ in both runs: **GPU token generation is not faster than CPU** (9.31 < 9.86 and
 |---|---|---|---|
 | 1 | **5 CPU-s** (wall 10 s) | **33 CPU-s** (wall 13 s) | 6.6× |
 | 2 | **4 CPU-s** (wall 8 s) | **35 CPU-s** (wall 13 s) | 8.8× |
+| 3 | **5 CPU-s** (wall 9 s) | **37 CPU-s** (wall 19 s) | 7.4× |
 
-Same 96-token generation. The GPU run finishes *sooner* while consuming
-**roughly one seventh of the CPU**.
+Same 96-token generation. All three runs agree: the GPU run finishes *sooner*
+while consuming **roughly one seventh of the CPU**. The 4–5 CPU-seconds on the GPU
+side is the more stable half of the measurement; the 33–37 on the CPU side is the
+one that moves, exactly as the throughput table above would predict.
 
 This is the real result of the project. On a phone the scarce resource is not
 FLOPs, it is the ability to coexist with the foreground: thermal headroom,
@@ -224,8 +250,10 @@ because we did it.)
 
 ## Caveats we are aware of
 
-- **n = 2 runs.** Enough to show the GPU pp64 figure is stable and that the tg
-  direction is consistent; not enough for tight confidence intervals.
+- **n = 3 runs.** Enough to show the GPU pp64 figure is stable to 0.03 t/s and
+  that the tg direction is consistent; not enough for tight confidence intervals.
+  Runs 2 and 3 were also taken about an hour apart in the same session rather than
+  on separate days, so they are not fully independent of each other.
 - **The device is noisy.** Load average sat around 21–23 throughout, from
   processes outside Termux that we cannot see (non-root `ps` shows only our own
   UID). Absolute timings will differ on a quiet device.

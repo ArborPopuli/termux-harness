@@ -1,0 +1,13 @@
+# run 3 — 2026-10-01T01:21, same command, about an hour after run 2
+# command: llama-bench -m ~/qwen2.5-coder-7b.gguf -ngl 0,99 -p 64 -n 32 -r 3
+
+ggml_vulkan: Found 1 Vulkan devices:
+ggml_vulkan: 0 = Adreno (TM) 830 (turnip Mesa driver) | uma: 1 | fp16: 1 | bf16: 0 | fp4: 0 | warp size: 64 | shared memory: 32768 | int dot: 0 | matrix cores: none
+| model                          |       size |     params | backend    | ngl |            test |                  t/s |
+| ------------------------------ | ---------: | ---------: | ---------- | --: | --------------: | -------------------: |
+| qwen2 7B Q4_K - Medium         |   4.36 GiB |     7.62 B | Vulkan     |   0 |            pp64 |         37.40 ± 0.60 |
+| qwen2 7B Q4_K - Medium         |   4.36 GiB |     7.62 B | Vulkan     |   0 |            tg32 |         12.26 ± 0.74 |
+| qwen2 7B Q4_K - Medium         |   4.36 GiB |     7.62 B | Vulkan     |  99 |            pp64 |         45.74 ± 0.05 |
+| qwen2 7B Q4_K - Medium         |   4.36 GiB |     7.62 B | Vulkan     |  99 |            tg32 |         10.45 ± 0.02 |
+
+build: unknown (0)
